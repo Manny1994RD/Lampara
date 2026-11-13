@@ -10,6 +10,22 @@ import { getActivePlanProgress } from './plans';
 import type { Settings } from './settings';
 import { getVotd } from './votd';
 
+/** Sends the next two weeks of verses to the Android home-screen widget. */
+export async function updateVotdWidget(db: SQLiteDatabase, tr: string | null, lang: Lang) {
+  if (Platform.OS !== 'android') return;
+  const { VotdWidget } = await import('@/widgets/votd-widget');
+  const { t } = getT();
+  const days = [];
+  const now = new Date();
+  for (let i = 0; i < VOTD_DAYS_AHEAD; i++) {
+    const day = new Date(now);
+    day.setDate(now.getDate() + i);
+    const v = await getVotd(db, tr, lang, day);
+    days.push({ day: localDay(day), label: v.label, text: v.text });
+  }
+  VotdWidget.updateSnapshot({ title: t('today.votd'), days, empty: t('notif.openToRead') });
+}
+
 export const notificationsSupported = Platform.OS !== 'web';
 
 const CHANNEL = 'daily';

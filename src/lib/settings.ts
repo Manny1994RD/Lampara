@@ -41,6 +41,14 @@ export type Settings = {
   hiddenBibles: string[];
   /** Language filter for the Bible list in Settings. */
   bibleFilter: 'all' | 'en' | 'es' | 'ko';
+  /** Reader fills the whole screen (no menu, smaller header). */
+  readerFullscreen: boolean;
+  /** Second Bible shown next to (or under) each verse; null = off. */
+  parallelBible: string | null;
+  /** Read-aloud player shrunk to a small button. */
+  listenMini: boolean;
+  /** Mark a chapter read after listening to the whole of it. */
+  autoMarkListened: boolean;
 };
 
 const DEFAULTS: Settings = {
@@ -67,6 +75,10 @@ const DEFAULTS: Settings = {
   defaultBible: null,
   hiddenBibles: [],
   bibleFilter: 'all',
+  readerFullscreen: false,
+  parallelBible: null,
+  listenMini: false,
+  autoMarkListened: true,
 };
 
 const KEY = 'settings.v1';

@@ -56,7 +56,7 @@ async function insertVerses(db: SQLiteDatabase, tr: string, verses: HubVerse[]) 
 export async function refreshHubBibles(db: SQLiteDatabase) {
   if (!getHub()) return;
   const { items } = await listHubBibles();
-  const local = await db.getAllAsync<TrInfo>('SELECT id, hub_id, offline FROM translations');
+  const local = await db.getAllAsync<TrInfo & { lang: string }>('SELECT id, hub_id, offline, lang FROM translations');
   const onHub = new Set(items.map((b) => b.id));
   let changed = false;
 
@@ -80,6 +80,10 @@ export async function refreshHubBibles(db: SQLiteDatabase) {
       changed = true;
     } else if (!mine.hub_id) {
       await db.runAsync('UPDATE translations SET hub_id = ? WHERE id = ?', b.id, b.id);
+      changed = true;
+    } else if (!mine.offline && mine.lang !== b.lang) {
+      // The hub corrected the language.
+      await db.runAsync('UPDATE translations SET lang = ? WHERE id = ?', b.lang, b.id);
       changed = true;
     }
   }

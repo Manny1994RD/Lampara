@@ -10,11 +10,13 @@ import {
   StyleSheet,
   Switch,
   Text,
+  useWindowDimensions,
   View,
   type ImageSourcePropType,
   type ScrollViewInstance,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 
 import { ImportButton } from '@/components/import-button';
 import { ChapterPicker } from '@/components/reader/chapter-picker';
@@ -73,6 +75,12 @@ export default function ReadScreen() {
   const tr = current?.id ?? null;
 
   const verses = useLive((d) => (tr ? getChapter(d, tr, book, chapter) : Promise.resolve([])), [tr, book, chapter], ['translations']);
+  // Second Bible side by side (scroll view only).
+  const second = settings.parallelBible && settings.parallelBible !== tr ? (list?.find((x) => x.id === settings.parallelBible) ?? null) : null;
+  const tr2 = second?.id ?? null;
+  const verses2 = useLive((d) => (tr2 ? getChapter(d, tr2, book, chapter) : Promise.resolve([])), [tr2, book, chapter], ['translations']);
+  const { width: winW } = useWindowDimensions();
+  const fullscreen = settings.readerFullscreen;
   const highlights = useLive((d) => getChapterHighlights(d, book, chapter), [book, chapter], ['highlights']);
   const bookmarks = useLive(async (d) => new Set((await getChapterBookmarks(d, book, chapter)).map((r) => r.v)), [book, chapter], ['bookmarks']);
   const notes = useLive(async (d) => new Map((await getChapterNotes(d, book, chapter)).map((n) => [n.v, n.body])), [book, chapter], ['notes']);
@@ -138,7 +146,22 @@ export default function ReadScreen() {
       next();
       return true;
     },
+    onChapterListened: () => {
+      if (settings.autoMarkListened) markChapterRead(db, book, chapter, tr);
+    },
   });
+
+  // Two-thirds into a chapter, ask the hub to make the next chapter's voice too.
+  const nearEnd = listen.playing && listen.engine === 'natural' && !!verses?.length && (listen.verse ?? 0) >= verses.length * 0.66;
+  useEffect(() => {
+    if (!nearEnd || !tr) return;
+    const nb = chapter < getBook(book).chapters ? book : book + 1;
+    const nc = nb === book ? chapter + 1 : 1;
+    if (nb > 66) return;
+    getChapter(db, tr, nb, nc)
+      .then((v) => narrator.warm(v))
+      .catch(() => {});
+  }, [nearEnd, db, tr, book, chapter]);
 
   const selRefs: VerseRef[] = selected.map((v) => ({ book, ch: chapter, v }));
   const toggle = (v: number) => setSelected((s) => (s.includes(v) ? s.filter((x) => x !== v) : [...s, v].sort((a, b) => a - b)));
@@ -213,6 +236,25 @@ export default function ReadScreen() {
     />
   );
 
+  const wordHls2 = (v: number) => (highlights ?? []).filter((h) => h.v === v && h.tr === tr2 && h.start != null);
+  const renderVerse2 = (v: Verse) => (
+    <VerseText
+      key={`b${v.v}`}
+      verse={v}
+      fontSize={fontSize}
+      colors={pc}
+      selected={selected.includes(v.v)}
+      verseColor={verseHl(v.v)}
+      wordHighlights={wordHls2(v.v)}
+      onPress={() => toggle(v.v)}
+      leadingSpace={false}
+    />
+  );
+  // Side by side on wide screens; on phones the second Bible goes under each verse.
+  const sideBySide = winW >= 760;
+  const pageMax = second ? (sideBySide ? Math.max(1100, fontSize * 64) : Math.max(ReaderMaxWidth, fontSize * 40)) : Math.max(ReaderMaxWidth, fontSize * 40);
+  const second2 = new Map((verses2 ?? []).map((v) => [v.v, v]));
+
   const prevTarget = chapter > 1 ? { b: book, c: chapter - 1 } : book > 1 ? { b: book - 1, c: getBook(book - 1).chapters } : null;
   const bookMode = settings.readerMode === 'book';
 
@@ -220,9 +262,10 @@ export default function ReadScreen() {
 
   return (
     <View style={[styles.flex, { backgroundColor: t.background }]}>
+      {fullscreen && <StatusBar hidden />}
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 6, borderColor: t.border, backgroundColor: t.background }]}>
-        <View style={[styles.headerInner, { maxWidth: ReaderMaxWidth + 80 }]}>
+      <View style={[styles.header, { paddingTop: (fullscreen ? 0 : insets.top) + 6, borderColor: t.border, backgroundColor: t.background }]}>
+        <View style={[styles.headerInner, { maxWidth: Math.max(pageMax, ReaderMaxWidth) + 80 }]}>
           <Pressable onPress={() => setPicker(true)} style={({ pressed }) => [styles.refButton, { backgroundColor: t.cardAlt, opacity: pressed ? 0.7 : 1 }]}>
             <Txt variant="label" numberOfLines={1}>
               {bookName(book, lang)} {chapter}
@@ -232,6 +275,7 @@ export default function ReadScreen() {
           <Pressable onPress={() => setTrPicker(true)} style={({ pressed }) => [styles.trButton, { borderColor: t.border, opacity: pressed ? 0.7 : 1 }]}>
             <Txt variant="small" style={{ fontWeight: '700' }} numberOfLines={1}>
               {current?.abbr ?? '…'}
+              {second ? (winW >= 520 ? ` + ${second.abbr}` : ' ⇄') : ''}
             </Txt>
           </Pressable>
           <View style={{ flex: 1 }} />
@@ -243,10 +287,19 @@ export default function ReadScreen() {
           />
           <IconButton icon="search" label={L('read.search')} onPress={() => router.push('/search')} />
           <IconButton icon={bookMode ? 'book-outline' : 'text'} label={L('read.display')} onPress={() => setFontSheet(true)} />
+          {/* Phones have little room in the header: there it's in the Display sheet. */}
+          {(winW >= 520 || fullscreen) && (
+            <IconButton
+              icon={fullscreen ? 'contract-outline' : 'expand-outline'}
+              active={fullscreen}
+              label={fullscreen ? L('read.exitFullscreen') : L('read.fullscreen')}
+              onPress={() => updateSettings({ readerFullscreen: !fullscreen })}
+            />
+          )}
         </View>
       </View>
 
-      {bookMode && verses && verses.length > 0 ? (
+      {bookMode && !second && verses && verses.length > 0 ? (
         <View style={[styles.flex, { backgroundColor: t.background }]}>
           <BookView
             chapterKey={chapterKey}
@@ -257,6 +310,7 @@ export default function ReadScreen() {
             colors={pc}
             startAtEnd={endKey === chapterKey}
             allowTwoPages={settings.twoPages}
+            followVerse={listen.open ? listen.verse : null}
             canPrevChapter={!!prevTarget}
             canNextChapter={!(book === 66 && chapter === 22)}
             onPrevChapter={() => {
@@ -284,8 +338,8 @@ export default function ReadScreen() {
         </View>
       ) : (
       <PaperBackground texture={pc.texture} base={paper ? pc.base : t.background}>
-      <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: selected.length ? 220 : 60 }}>
-        <View style={[styles.page, { maxWidth: ReaderMaxWidth, paddingHorizontal: tablet ? 40 : 20 }]}>
+      <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: selected.length ? 220 : listen.open ? (settings.listenMini ? 90 : 170) : 60 }}>
+        <View style={[styles.page, { maxWidth: pageMax, paddingHorizontal: tablet ? 40 : 20 }]}>
           <Text style={[styles.chapterTitle, { color: pc.text, fontFamily: Fonts.serif }]}>
             {bookName(book, lang)} {chapter}
           </Text>
@@ -294,6 +348,39 @@ export default function ReadScreen() {
             <Txt muted style={{ marginVertical: 30 }}>
               {missingText}
             </Txt>
+          ) : second ? (
+            <>
+              <Row gap={20} style={{ marginBottom: 8 }}>
+                <Txt variant="caption" muted style={{ flex: 1, textAlign: sideBySide ? 'left' : 'center' }}>
+                  {current?.abbr}
+                  {sideBySide ? '' : ` · ${second.abbr}`}
+                </Txt>
+                {sideBySide && (
+                  <Txt variant="caption" muted style={{ flex: 1 }}>
+                    {second.abbr}
+                  </Txt>
+                )}
+              </Row>
+              {verses.map((v) => {
+                const b = second2.get(v.v);
+                const style = { fontSize, lineHeight: fontSize * 1.6, color: pc.text, fontFamily: Fonts.serif };
+                return sideBySide ? (
+                  <View key={v.v} style={styles.pairRow}>
+                    <Text style={[style, { flex: 1 }]}>{renderVerse(v, false)}</Text>
+                    <Text style={[style, { flex: 1 }]}>{b ? renderVerse2(b) : ''}</Text>
+                  </View>
+                ) : (
+                  <View key={v.v} style={{ marginBottom: 12 }}>
+                    <Text style={style}>{renderVerse(v, false)}</Text>
+                    {b && (
+                      <Text style={[style, { fontSize: fontSize * 0.88, lineHeight: fontSize * 1.45, color: pc.muted, marginTop: 2 }]}>
+                        {renderVerse2(b)}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })}
+            </>
           ) : (
             paragraphs.map((para, pi) => (
               <Text key={pi} style={[styles.paragraph, { fontSize, lineHeight: fontSize * 1.65, color: pc.text, fontFamily: Fonts.serif }]}>
@@ -351,7 +438,7 @@ export default function ReadScreen() {
       </PaperBackground>
       )}
 
-      {listen.open && (
+      {listen.open && selected.length === 0 && (
         <ListenBar
           label={`${bookName(book, lang)} ${chapter}`}
           playing={listen.playing}
@@ -360,7 +447,9 @@ export default function ReadScreen() {
           engine={listen.engine}
           fellBack={listen.fellBack}
           naturalOk={!!voiceStatus?.available}
-          bottomInset={0}
+          sleepUntil={listen.sleepUntil}
+          sleepAtChapterEnd={listen.sleepAtChapterEnd}
+          bottom={bookMode && !second ? 56 : 14}
         />
       )}
 
@@ -452,6 +541,32 @@ export default function ReadScreen() {
             {x.id === tr && <Ionicons name="checkmark-circle" size={22} color={t.accent} />}
           </Pressable>
         ))}
+        {(list?.length ?? 0) > 1 && (
+          <>
+            <Txt variant="label" style={{ marginTop: 18, marginBottom: 4 }}>
+              {L('read.compare')}
+            </Txt>
+            <Txt variant="small" muted style={{ marginBottom: 8 }}>
+              {L('read.compareHint')}
+            </Txt>
+            <Row style={{ flexWrap: 'wrap' }}>
+              <Chip label={L('read.compareOff')} selected={!second} onPress={() => updateSettings({ parallelBible: null })} />
+              {(list ?? [])
+                .filter((x) => x.id !== tr && (!settings.hiddenBibles.includes(x.id) || x.id === settings.parallelBible))
+                .map((x) => (
+                  <Chip
+                    key={x.id}
+                    label={`${x.abbr} · ${x.lang.toUpperCase()}`}
+                    selected={second?.id === x.id}
+                    onPress={() => {
+                      updateSettings({ parallelBible: x.id });
+                      setTrPicker(false);
+                    }}
+                  />
+                ))}
+            </Row>
+          </>
+        )}
         <Row style={{ marginTop: 16, flexWrap: 'wrap' }}>
           <Button
             small
@@ -468,6 +583,10 @@ export default function ReadScreen() {
       </Sheet>
 
       <Sheet visible={fontSheet} onClose={() => setFontSheet(false)} title={L('read.display')}>
+        <Row style={{ justifyContent: 'space-between', marginBottom: 16 }}>
+          <Txt variant="label">{L('read.fullscreen')}</Txt>
+          <Switch value={fullscreen} onValueChange={(v) => updateSettings({ readerFullscreen: v })} />
+        </Row>
         <Txt variant="label" style={{ marginBottom: 8 }}>
           {L('read.style')}
         </Txt>
@@ -485,6 +604,11 @@ export default function ReadScreen() {
             </View>
             <Switch value={settings.twoPages} onValueChange={(v) => updateSettings({ twoPages: v })} />
           </Row>
+        )}
+        {bookMode && second && (
+          <Txt variant="small" muted style={{ marginTop: 8 }}>
+            {L('read.compareBookNote')}
+          </Txt>
         )}
 
         <Txt variant="label" style={{ marginTop: 18, marginBottom: 8 }}>
@@ -615,11 +739,12 @@ const styles = StyleSheet.create({
   swatch: { width: 64, height: 64, borderRadius: 12, overflow: 'hidden' },
   header: { borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingBottom: 8 },
   headerInner: { flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%', alignSelf: 'center' },
-  refButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, flexShrink: 1 },
-  trButton: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1, maxWidth: 110 },
+  refButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, flexShrink: 1, minWidth: 96 },
+  trButton: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1, maxWidth: 170, flexShrink: 2 },
   page: { width: '100%', alignSelf: 'center', paddingTop: 18 },
   chapterTitle: { fontSize: 30, fontWeight: '700', marginBottom: 14, textAlign: 'center' },
   paragraph: { marginBottom: 10 },
+  pairRow: { flexDirection: 'row', gap: 28, marginBottom: 12 },
   verseNum: { fontWeight: '700', fontFamily: Platform.select({ web: 'var(--font-display)', default: undefined }) },
   actionBar: {
     position: 'absolute',

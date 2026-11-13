@@ -143,7 +143,9 @@ English, Spanish and Korean (10 voices: Female 1–5, Male 1–5). It runs on th
 
 - In the reader, tap the **headphones**. Under the sliders button choose **Natural voice** and a voice for each language.
 - The first time a verse is read, the hub makes its audio (a few seconds) and keeps it as an MP3 in
-  `server/voice_cache`, so it's instant next time. The app asks for the next verses ahead of time.
+  `server/voice_cache`, so it's instant next time. When you press play, the hub starts making the rest of the
+  chapter in the background (and the next chapter when you're two-thirds through), so the gaps disappear.
+  Phones also keep each verse's audio, so chapters you've heard play instantly, even offline.
 - The cache is limited to 3 GB (oldest audio removed first); change `VOICE_CACHE_MB` in `docker-compose.yml`.
   Deleting the folder is safe — audio is simply made again.
 - If the voice service is down or you're not signed in, the app uses the phone's own voice instead.

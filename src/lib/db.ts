@@ -1,7 +1,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { guessLanguage } from './esword';
+
 export const DB_NAME = 'lampara.db';
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 /**
  * Personal tables that sync to the hub: [sync kind, table, SQL expression for the item id].
@@ -187,6 +189,17 @@ export async function migrateDb(db: SQLiteDatabase) {
         PRIMARY KEY (tr, book, ch)
       ) WITHOUT ROWID;
     `);
+  }
+
+  if (current >= 1 && current < 5) {
+    // Bibles named '... Version' were taken for Spanish; check their language again from John 1.
+    const trs = await db.getAllAsync<{ id: string; name: string; lang: string }>('SELECT id, name, lang FROM translations');
+    for (const t of trs) {
+      const rows = await db.getAllAsync<{ text: string }>('SELECT text FROM verses WHERE tr = ? AND book = 43 AND ch = 1 ORDER BY v LIMIT 6', t.id);
+      if (!rows.length) continue;
+      const lang = guessLanguage(rows.map((r) => r.text).join(' '), t.name);
+      if (lang !== t.lang) await db.runAsync('UPDATE translations SET lang = ? WHERE id = ?', lang, t.id);
+    }
   }
 
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);

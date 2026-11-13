@@ -56,3 +56,37 @@ routerAdd(
   },
   $apis.requireAuth('users')
 );
+
+/** Make verses ahead of time: POST /api/lampara/voice/warm {lang, voice, texts: [...]} (the rest of a chapter). */
+routerAdd(
+  'POST',
+  '/api/lampara/voice/warm',
+  (e) => {
+    const base = $os.getenv('LAMPARA_VOICE_URL');
+    if (!base) return e.json(200, { queued: 0 });
+    const b = e.requestInfo().body || {};
+    const lang = String(b.lang || '');
+    const voice = String(b.voice || '');
+    if (['en', 'es', 'ko'].indexOf(lang) < 0) throw new BadRequestError('Unsupported language.');
+    if (!/^[FM][1-5]$/.test(voice)) throw new BadRequestError('Unknown voice.');
+    const texts = [];
+    const list = Array.isArray(b.texts) ? b.texts : [];
+    for (let i = 0; i < list.length && texts.length < 300; i++) {
+      const t = String(list[i] || '').trim();
+      if (t && t.length <= 2000) texts.push(t);
+    }
+    try {
+      const r = $http.send({
+        url: base + '/warm',
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ texts: texts, lang: lang, voice: voice }),
+        timeout: 10,
+      });
+      return e.json(200, { queued: (r.json && r.json.queued) || 0 });
+    } catch (err) {
+      throw new ApiError(503, 'The voice service is not responding.', {});
+    }
+  },
+  $apis.requireAuth('users')
+);

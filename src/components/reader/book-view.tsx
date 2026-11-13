@@ -41,6 +41,8 @@ type Props = {
   canNextChapter: boolean;
   onPrevChapter: () => void;
   onNextChapter: () => void;
+  /** Verse being read aloud: the book turns to its page. */
+  followVerse?: number | null;
   /** Shown under the book (e.g. "mark as read"). */
   bottomBar?: ReactNode;
 };
@@ -56,9 +58,11 @@ export function BookView(props: Props) {
     if (Math.abs(width - size.w) > 1 || Math.abs(height - size.h) > 1) setSize({ w: width, h: height });
   };
 
-  const spread = props.allowTwoPages && size.w >= 900 && size.w > size.h * 1.15;
+  // Two pages when the screen is wide or nearly square (landscape tablets, unfolded foldables).
+  const spread = props.allowTwoPages && size.w >= 640 && size.w >= size.h * 0.8;
   const outer = size.w < 500 ? 8 : 18;
-  const pageW = spread ? (size.w - outer * 2) / 2 : Math.min(size.w - outer * 2, 760);
+  // A single page grows with the text size (about 70 letters a line), so big text uses the whole tablet.
+  const pageW = spread ? (size.w - outer * 2) / 2 : Math.min(size.w - outer * 2, Math.max(760, fontSize * 40));
   const pageH = size.h - outer * 2;
   const padX = pageW < 420 ? 22 : 36;
   const padTop = 30;
@@ -117,6 +121,17 @@ export function BookView(props: Props) {
     pos.key === posKey ? Math.min(pos.unit, Math.max(0, unitCount - 1)) : props.startAtEnd ? Math.max(0, unitCount - 1) : 0;
   const setUnit = (u: number) => setPos({ key: posKey, unit: u });
 
+  // Follow the verse being read aloud (adjusted while rendering, when it changes).
+  const follow = props.followVerse ?? null;
+  const [seenFollow, setSeenFollow] = useState<string | null>(null);
+  const followKey = `${posKey}|${follow}|${ready}`;
+  if (ready && follow != null && seenFollow !== followKey) {
+    setSeenFollow(followKey);
+    const pi = pageList.findIndex((pg) => pg.some((i) => verses[i].v === follow));
+    const u = pi < 0 ? unit : spread ? Math.floor(pi / 2) : pi;
+    if (u !== unit) setPos({ key: posKey, unit: u });
+  }
+
   /* ------------------------------- turning -------------------------------- */
 
   const [progress] = useState(() => new Animated.Value(0));
@@ -144,9 +159,10 @@ export function BookView(props: Props) {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: USE_NATIVE,
     }).start(() => {
+      // Don't reset the animation here: the old page would flash back for a frame before React re-renders.
+      // It's reset when the next turn starts.
       if (complete) setUnit(unit + dir);
       setTurning(null);
-      progress.setValue(0);
       ctl.p = 0;
       ctl.busy = false;
     });
@@ -160,13 +176,17 @@ export function BookView(props: Props) {
       return;
     }
     patch(ctl, { busy: true, p: 0 });
+    progress.setValue(0);
     setTurning({ dir });
     finishTurn(dir, true);
   };
 
   // Keep the latest handlers available to the gesture / keyboard listeners.
   useEffect(() => {
-    patch(ctl, { api: { canTurn, turn, finishTurn, start: (dir) => setTurning({ dir }), unitWidth: pageW } });
+    patch(ctl, { api: { canTurn, turn, finishTurn, start: (dir) => {
+          progress.setValue(0);
+          setTurning({ dir });
+        }, unitWidth: pageW } });
   });
 
   // Keyboard arrows on the web.
@@ -286,7 +306,7 @@ export function BookView(props: Props) {
         {size.w > 0 && !ready && (
           <View pointerEvents="none" style={[styles.measure, { width: contentW }]} key={measureKey}>
             <Text
-              onLayout={(e) => record('title', e.nativeEvent.layout.height + 1)}
+              onLayout={(e) => record('title', e.nativeEvent.layout.height + 14 + 1)}
               style={[styles.title, { fontFamily: Fonts.serif, fontSize: fontSize * 1.6 }]}>
               {props.title}
             </Text>

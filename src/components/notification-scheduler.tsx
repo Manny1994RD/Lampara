@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 
 import { useTranslations } from '@/hooks/use-translation';
 import { subscribe } from '@/lib/db';
-import { notificationsSupported, rescheduleNotifications } from '@/lib/notifications';
+import { notificationsSupported, rescheduleNotifications, updateVotdWidget } from '@/lib/notifications';
 import { updateSettings, useSettings } from '@/lib/settings';
 
 /** Keeps scheduled notifications up to date and opens the right screen when one is tapped. */
@@ -23,6 +23,7 @@ export function NotificationScheduler() {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         rescheduleNotifications(db, settings, tr, lang).catch((e) => console.warn('notifications', e));
+        updateVotdWidget(db, tr, lang).catch((e) => console.warn('widget', e));
       }, 800);
     };
     run();

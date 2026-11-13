@@ -25,3 +25,9 @@ export function voiceSource(text: string, lang: string, voice: string) {
   const q = `lang=${lang}&voice=${voice}&text=${encodeURIComponent(text)}`;
   return { uri: `${hub.url}/api/lampara/voice?${q}`, headers: { Authorization: hub.token } };
 }
+
+/** Asks the hub to make these verses in the background, so they play right away later. */
+export function warmVoices(texts: string[], lang: string, voice: string) {
+  if (!getHub() || texts.length === 0) return;
+  hubFetch('/api/lampara/voice/warm', { method: 'POST', body: { texts, lang, voice } }).catch(() => {});
+}

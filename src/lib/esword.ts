@@ -222,7 +222,8 @@ export function guessLanguage(sample: string, description = ''): 'en' | 'es' | '
   // Korean: mostly Hangul characters.
   const hangul = (sample.match(/[가-힣]/g) ?? []).length;
   if (hangul > 20 || /[가-힣]/.test(description)) return 'ko';
-  if (/biblia|versi[oó]n|reina|nuevo testamento|traducci/i.test(description)) return 'es';
+  // (Not plain 'version': English names like 'King James Version' have it too.)
+  if (/biblia|versión|reina|nuevo testamento|traducci/i.test(description)) return 'es';
   const t = normalizeForSearch(sample);
   const es = (t.match(SPANISH_HINTS) ?? []).length;
   const en = (t.match(ENGLISH_HINTS) ?? []).length;

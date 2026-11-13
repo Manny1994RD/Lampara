@@ -1,10 +1,11 @@
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer, type AudioSource } from 'expo-audio';
+import { Directory, File, Paths } from 'expo-file-system';
 import * as Speech from 'expo-speech';
 import { useEffect, useSyncExternalStore } from 'react';
 import { Platform } from 'react-native';
 
 import type { Verse } from '@/lib/data';
-import { voiceSource } from '@/lib/hub-voice';
+import { voiceSource, warmVoices } from '@/lib/hub-voice';
 
 /** Language codes the phone's text-to-speech understands, per Bible language. */
 export const SPEECH_LANG = { en: 'en-US', es: 'es-ES', ko: 'ko-KR' } as const;
@@ -27,6 +28,9 @@ type NarratorState = {
   engine: 'natural' | 'device';
   /** The hub's voice couldn't be reached, so the phone's voice took over. */
   fellBack: boolean;
+  /** Sleep timer: stop at this time (ms), or at the end of the chapter. */
+  sleepUntil: number | null;
+  sleepAtChapterEnd: boolean;
 };
 
 type NarratorOptions = {
@@ -42,9 +46,11 @@ type NarratorOptions = {
   title: string;
   /** Turns to the next chapter; returns false at the end of the Bible. */
   onChapterEnd: () => boolean;
+  /** Called when (almost) every verse of the chapter on screen was read aloud. */
+  onChapterListened?: () => void;
 };
 
-const PREFETCH = 2;
+const PREFETCH = 3;
 const KEEP = 24;
 
 /**
@@ -53,7 +59,15 @@ const KEEP = 24;
  * Phone voice: the device's text-to-speech ("pause" restarts the verse, because Android can't pause it).
  */
 class Narrator {
-  private state: NarratorState = { open: false, playing: false, verse: null, engine: 'device', fellBack: false };
+  private state: NarratorState = {
+    open: false,
+    playing: false,
+    verse: null,
+    engine: 'device',
+    fellBack: false,
+    sleepUntil: null,
+    sleepAtChapterEnd: false,
+  };
   private listeners = new Set<() => void>();
   // Each verse gets a token; callbacks from older verses (after stop/skip) are ignored.
   private token = 0;
@@ -78,6 +92,12 @@ class Narrator {
   private lockScreen = false;
   // Verse audio already requested from the hub: key -> playable source.
   private audio = new Map<string, Promise<AudioSource>>();
+  // Chapters (lang|voice|book:chapter) the hub was already asked to make ahead of time.
+  private warmed = new Set<string>();
+  // Verses read aloud in the chapter being played (to mark it read at the end).
+  private heard = new Set<number>();
+  private heardKey: string | null = null;
+  private sleepTimer: ReturnType<typeof setTimeout> | null = null;
 
   subscribe = (l: () => void) => {
     this.listeners.add(l);
@@ -133,11 +153,22 @@ class Narrator {
     const p = (async (): Promise<AudioSource> => {
       const src = voiceSource(text, lang, naturalVoice);
       if (!src) throw new Error('Not signed in to a hub.');
-      const res = await fetch(src.uri, { headers: src.headers });
-      if (!res.ok) throw new Error(`Voice error ${res.status}`);
-      if (Platform.OS === 'web') return URL.createObjectURL(await res.blob());
-      await res.arrayBuffer(); // made and cached on the hub; the player streams it from there
-      return src;
+      if (Platform.OS === 'web') {
+        const res = await fetch(src.uri, { headers: src.headers });
+        if (!res.ok) throw new Error(`Voice error ${res.status}`);
+        return URL.createObjectURL(await res.blob());
+      }
+      // Phones keep each verse as a file, so it starts instantly (and works offline) next time.
+      const file = new File(voiceDir(), `${hash(k)}.mp3`);
+      if (!file.exists) {
+        await File.downloadFileAsync(src.uri, file, { headers: src.headers, idempotent: true });
+        // An error reply is a few bytes of JSON, not audio.
+        if (!file.exists || file.size < 1000) {
+          if (file.exists) file.delete();
+          throw new Error('Voice error');
+        }
+      }
+      return { uri: file.uri };
     })();
     p.catch(() => this.audio.delete(k));
     this.audio.set(k, p);
@@ -156,13 +187,33 @@ class Narrator {
     const verses = this.verses;
     if (!verses) return;
     this.playingKey = this.key;
+    if (this.heardKey !== this.key) {
+      this.heardKey = this.key;
+      this.heard.clear();
+    }
     if (index >= verses.length) {
-      // End of the chapter: turn the page; reading continues once the next chapter's verses arrive.
+      // End of the chapter: mark it read if it was (nearly) all heard, then turn the page;
+      // reading continues once the next chapter's verses arrive.
+      if (this.heard.size >= Math.max(1, Math.floor(verses.length * 0.8))) this.opts.onChapterListened?.();
+      this.heard.clear();
+      this.heardKey = null;
+      if (this.state.sleepAtChapterEnd) {
+        this.setSleep(null);
+        this.set({ playing: false, verse: verses[verses.length - 1].v });
+        return;
+      }
       this.set({ verse: null });
       if (!this.opts.onChapterEnd()) this.set({ playing: false });
       return;
     }
+    if (this.state.sleepUntil != null && Date.now() >= this.state.sleepUntil) {
+      // Sleep timer ran out while the screen was off.
+      this.setSleep(null);
+      this.set({ playing: false, verse: verses[index].v });
+      return;
+    }
     const v = verses[index];
+    this.heard.add(index);
     this.set({ verse: v.v, playing: true, engine: this.useNatural() ? 'natural' : 'device' });
     if (this.useNatural()) this.playNatural(index, mine);
     else this.speakDevice(index, mine);
@@ -187,6 +238,7 @@ class Narrator {
     const verses = this.verses!;
     const v = verses[index];
     const text = speakable(v.text, this.opts.lang);
+    this.warm(verses.slice(index + 1));
     // Ask for the next verses now so the hub makes them while this one plays.
     for (let j = index + 1; j <= index + PREFETCH && j < verses.length; j++) {
       this.fetchAudio(speakable(verses[j].text, this.opts.lang)).catch(() => {});
@@ -222,6 +274,31 @@ class Narrator {
     } catch {
       // Lock-screen controls are optional.
     }
+  }
+
+  /** Asks the hub to make these verses in the background (once per chapter and voice). */
+  warm(verses: Verse[] | null | undefined) {
+    if (!verses?.length || !this.useNatural()) return;
+    const { lang, naturalVoice } = this.opts;
+    const k = `${lang}|${naturalVoice}|${verses[0].book}:${verses[0].ch}`;
+    if (this.warmed.has(k)) return;
+    this.warmed.add(k);
+    warmVoices(verses.map((x) => speakable(x.text, lang)), lang, naturalVoice);
+  }
+
+  /** Sleep timer: minutes from now, 'chapter' (end of this chapter) or null (off). */
+  setSleep(when: number | 'chapter' | null) {
+    if (this.sleepTimer) clearTimeout(this.sleepTimer);
+    this.sleepTimer = null;
+    if (when === 'chapter') return this.set({ sleepUntil: null, sleepAtChapterEnd: true });
+    if (when == null) return this.set({ sleepUntil: null, sleepAtChapterEnd: false });
+    const until = Date.now() + when * 60_000;
+    this.set({ sleepUntil: until, sleepAtChapterEnd: false });
+    this.sleepTimer = setTimeout(() => {
+      this.sleepTimer = null;
+      if (this.state.playing) this.pause();
+      this.set({ sleepUntil: null });
+    }, when * 60_000);
   }
 
   configure(opts: NarratorOptions) {
@@ -289,6 +366,7 @@ class Narrator {
   }
   close() {
     this.silence();
+    this.setSleep(null);
     this.playingKey = null;
     if (this.lockScreen) {
       try {
@@ -326,6 +404,32 @@ export function useReadAloud({
   useEffect(() => () => narrator.close(), []);
 
   return state;
+}
+
+let dir: Directory | null = null;
+/** Folder for verse audio on the phone (cleared when it gets big). */
+function voiceDir() {
+  if (dir) return dir;
+  dir = new Directory(Paths.cache, 'voice');
+  try {
+    if (dir.exists && dir.list().length > 3000) dir.delete();
+    if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
+  } catch {
+    // the download will report a problem
+  }
+  return dir;
+}
+
+/** Short stable name for a verse's audio file. */
+function hash(s: string) {
+  let a = 0x811c9dc5;
+  let b = 0x01000193;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193);
+    b = Math.imul(b ^ c, 0x5bd1e995);
+  }
+  return (a >>> 0).toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0') + s.length.toString(36);
 }
 
 /** Voices installed on this device for a Bible language (best quality first). */

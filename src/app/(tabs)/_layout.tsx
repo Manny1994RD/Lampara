@@ -1,3 +1,4 @@
+import { usePathname } from 'expo-router';
 import { TabList, TabSlot, TabTrigger, Tabs, type TabTriggerSlotProps } from 'expo-router/ui';
 import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -7,6 +8,7 @@ import { Ionicons, useIsTablet, type IconName } from '@/components/ui';
 import { Fonts } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useT, type TKey } from '@/i18n';
+import { useSettings } from '@/lib/settings';
 
 const TABS: {
   name: string;
@@ -27,6 +29,9 @@ export default function TabsLayout() {
   const t = useTheme();
   const tablet = useIsTablet();
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
+  // Full-screen reading hides the menu (the reader has its own button to bring it back).
+  const hidden = useSettings().readerFullscreen && pathname === '/read';
 
   return (
     <Tabs style={{ flex: 1, flexDirection: tablet ? 'row' : 'column-reverse', backgroundColor: t.background }}>
@@ -35,6 +40,7 @@ export default function TabsLayout() {
           tablet ? styles.rail : styles.bar,
           { backgroundColor: t.background, borderColor: t.border },
           tablet ? { paddingTop: insets.top + 16, paddingLeft: insets.left } : { paddingBottom: insets.bottom + 4 },
+          hidden && { display: 'none' },
         ]}>
         {tablet && (
           <View style={styles.brand}>
