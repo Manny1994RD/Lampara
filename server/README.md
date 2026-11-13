@@ -2,6 +2,8 @@
 
 The hub is a small server that runs on your ZimaOS. It:
 
+- serves the **Lámpara website** at the hub's address (open it on iPhone, a PC, anywhere — "Add to Home Screen" on iPhone),
+
 - keeps your **phone, tablet and the website in sync** (reading progress, highlights, notes, topics, bookmarks, plans),
 - holds **accounts** for you and the friends you invite (invite-only — nobody else can sign up),
 - powers **friend challenges**: leaderboards, progress, cheers and nudges,
@@ -16,7 +18,9 @@ It's built on [PocketBase](https://pocketbase.io) (one small program + a SQLite 
 
 ## 1. Install on ZimaOS
 
-You need the repository on the ZimaOS machine. In the ZimaOS terminal (or over SSH):
+One container runs everything: the hub **and** the website, on port 8090.
+
+Open a terminal on ZimaOS (Settings → enable SSH, then `ssh` from your PC, or the ZimaOS web terminal) and run:
 
 ```bash
 cd /DATA/AppData
@@ -25,10 +29,16 @@ cd lampara/server
 docker compose up -d --build
 ```
 
-> The repo is private, so `git clone` will ask you to sign in to GitHub (use a personal access token as the password),
-> or download the repo as a ZIP from GitHub and copy the `server` folder to ZimaOS.
+- The repo is private: when `git clone` asks for a password, use a GitHub **personal access token**
+  (GitHub → Settings → Developer settings → Fine-grained tokens → read-only access to the *Lampara* repo).
+- The first build downloads the app's packages and builds the website, so it takes a few minutes
+  (it needs ~2 GB of free memory while building).
 
-Check it's running: open `http://<zimaos-ip>:8090/api/health` in a browser — you should see `"API is healthy."`
+Check it's running:
+
+- `http://<zimaos-ip>:8090/api/health` → `"API is healthy."`
+- `http://<zimaos-ip>:8090/` → the Lámpara website. (On plain `http://` the website only works from `localhost`;
+  use the `https://` Tailscale address below to open it from other devices.)
 
 Your data lives in `/DATA/AppData/lampara/server/pb_data`. **Back up that folder** (ZimaOS backup, or copy it now and then).
 
@@ -67,18 +77,37 @@ Tap **Cheer** to send 🔥👏🙏💪❤️, or **Nudge** someone who's behind.
 
 ---
 
-## Reaching the hub away from home
+## Open it anywhere with Tailscale (https)
 
-At home, `http://<zimaos-ip>:8090` works on your Wi-Fi. To use it anywhere (and to share it with friends outside your
-home), pick one:
+The website needs an `https://` address (browsers only allow its offline database on secure pages), and `https`
+is nicer for the phone app too. Tailscale gives you one with a real certificate, without opening router ports.
 
-- **Tailscale** (recommended for you + a few friends): install Tailscale from the ZimaOS app store and on each phone.
-  Use the ZimaOS Tailscale address, e.g. `http://zimaos.your-tailnet.ts.net:8090`.
-  `tailscale serve` can also give it an `https://` address.
-- **Cloudflare Tunnel**: gives the hub a public `https://` address on your own domain without opening router ports.
+1. **Tailscale on ZimaOS** — install it from the ZimaOS App Store (if you haven't) and sign in.
+2. **Turn on HTTPS once** — in the Tailscale admin console → **DNS**: make sure **MagicDNS** is on, then
+   **Enable HTTPS** (Certificates).
+3. **Share port 8090 over https** — in the ZimaOS terminal:
 
-> **Note for Android:** release APKs only allow plain `http://` addresses if the app is built to allow it. The APK build
-> step (next phase) will either enable that for your home network or use your `https://` (Tailscale/Cloudflare) address.
+   ```bash
+   # If Tailscale runs as a ZimaOS app (a container), find its name first:
+   docker ps --format '{{.Names}}' | grep -i tailscale
+   docker exec <that-name> tailscale serve --bg 8090
+
+   # If the tailscale command works directly on ZimaOS instead:
+   tailscale serve --bg 8090
+   ```
+
+   It prints your address, like `https://zimaos.tail1234.ts.net`. That's your Lámpara address:
+   - **Website:** open `https://zimaos.tail1234.ts.net` on any device that has Tailscale on.
+     On iPhone: Safari → Share → **Add to Home Screen**.
+   - **Phone app:** Settings → Hub → use the same address.
+   - Check it anytime with `tailscale serve status` (same `docker exec …` prefix if needed).
+
+**Friends:** with `tailscale serve`, only devices in your tailnet can open it — share your ZimaOS machine with a
+friend from the Tailscale admin console (Machines → … → Share), and they install Tailscale too. If you'd rather
+friends open it without Tailscale, `tailscale funnel --bg 8090` (instead of `serve`) puts the same address on the
+public internet. The hub is invite-only either way, but with Funnel anyone can reach the sign-in page.
+
+At home on Wi-Fi the app also works with `http://<zimaos-ip>:8090` (the Android app is built to allow it).
 
 ---
 
@@ -91,7 +120,8 @@ cd server
 docker compose up -d --build
 ```
 
-Database changes (new tables/fields) are applied automatically on start-up from `pb_migrations/`.
+This rebuilds the website too. Database changes (new tables/fields) are applied automatically on start-up from
+`pb_migrations/`. Your data in `pb_data` is kept.
 
 ## 5. Your Bibles on the hub
 
@@ -123,11 +153,12 @@ node server/test/bible-test.mjs http://127.0.0.1:8090 owner@test.local member@te
 
 | File | What it does |
 |---|---|
-| `Dockerfile` | Downloads PocketBase (v0.40.6) and adds the Lámpara files |
+| `Dockerfile` | Builds the website, downloads PocketBase (v0.40.6) and adds the Lámpara files |
 | `docker-compose.yml` | Runs it on port 8090, data in `./pb_data` |
 | `pb_migrations/1763000000_lampara.js` | Tables and permission rules |
 | `pb_hooks/lampara.pb.js` | Invite-only sign-up and the `/api/lampara/sync` endpoint |
 | `pb_migrations/1763100000_bibles.js` | Tables for Bibles stored on the hub |
+| `pb_hooks/web.pb.js` | Headers the website needs (its offline database) |
 | `pb_hooks/bibles.pb.js` | `/api/lampara/bibles` routes: list, upload, read chapters, search |
 
 ### Privacy rules (enforced by the server)

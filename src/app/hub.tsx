@@ -6,7 +6,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import { Button, Card, Chip, IconButton, Row, Screen, Txt } from '@/components/ui';
 import { useTheme } from '@/hooks/use-theme';
 import { useT } from '@/i18n';
-import { signIn, signUp, useHub } from '@/lib/hub';
+import { defaultHubUrl, signIn, signUp, useHub } from '@/lib/hub';
 import { markAllForUpload, syncNow } from '@/lib/sync';
 
 /** Connect to your hub: sign in, or join with an invite code. */
@@ -16,7 +16,7 @@ export default function HubScreen() {
   const { t: tr } = useT();
   const hub = useHub();
   const [mode, setMode] = useState<'signin' | 'join'>('signin');
-  const [url, setUrl] = useState(hub?.url ?? '');
+  const [url, setUrl] = useState(hub?.url ?? defaultHubUrl());
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

@@ -1,0 +1,16 @@
+# Keep the Docker build small and never copy personal data into the image.
+.git
+node_modules
+dist
+web-build
+.expo
+.claude
+android
+ios
+server/pb_data
+*.bblx
+*.jks
+*.p8
+*.p12
+*.key
+.env*

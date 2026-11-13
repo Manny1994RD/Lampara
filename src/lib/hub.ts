@@ -68,6 +68,15 @@ export class HubError extends Error {
   }
 }
 
+/**
+ * On the website served by the hub itself, the hub is the same address as the page.
+ * (Not during development, where the page comes from the Expo dev server on port 8081.)
+ */
+export function defaultHubUrl() {
+  if (Platform.OS !== 'web' || typeof location === 'undefined') return '';
+  return location.port === '8081' ? '' : location.origin;
+}
+
 export function normalizeUrl(url: string) {
   let u = url.trim().replace(/\/+$/, '');
   if (u && !/^https?:\/\//i.test(u)) u = `http://${u}`;
