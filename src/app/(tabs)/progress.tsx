@@ -3,7 +3,8 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 
-import { Button, Card, Chip, Ionicons, ProgressBar, Row, Screen, Txt } from '@/components/ui';
+import { ReadingStats } from '@/components/reading-stats';
+import { Button, Card, Chip, Ionicons, ProgressBar, Row, Screen, SectionTitle, Txt } from '@/components/ui';
 import { BOOKS, TOTAL_CHAPTERS, bookName } from '@/data/books';
 import { useLive } from '@/hooks/use-live';
 import { useTheme } from '@/hooks/use-theme';
@@ -96,6 +97,12 @@ ${body}`)
           onPress={() => (marking ? stopMarking() : setMarking(true))}
         />
       </Row>
+      {!marking && (
+        <View style={{ marginTop: 12 }}>
+          <ReadingStats />
+          <SectionTitle>{tr('progress.byBook')}</SectionTitle>
+        </View>
+      )}
       <Txt muted style={{ marginBottom: 14 }}>
         {tr('progress.readOnce', { done: total, total: TOTAL_CHAPTERS })}
       </Txt>

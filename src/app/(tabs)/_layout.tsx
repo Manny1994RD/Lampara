@@ -1,4 +1,4 @@
-import { usePathname } from 'expo-router';
+import { Redirect, usePathname } from 'expo-router';
 import { TabList, TabSlot, TabTrigger, Tabs, type TabTriggerSlotProps } from 'expo-router/ui';
 import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -8,6 +8,8 @@ import { Ionicons, useIsTablet, type IconName } from '@/components/ui';
 import { Fonts } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useT, type TKey } from '@/i18n';
+import { useTranslations } from '@/hooks/use-translation';
+import { useHub } from '@/lib/hub';
 import { useSettings } from '@/lib/settings';
 
 const TABS: {
@@ -31,7 +33,14 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   // Full-screen reading hides the menu (the reader has its own button to bring it back).
-  const hidden = useSettings().readerFullscreen && pathname === '/read';
+  const settings = useSettings();
+  const hidden = settings.readerFullscreen && pathname === '/read';
+  const hub = useHub();
+  const { list } = useTranslations();
+  // First start (nothing on this device, not signed in): the welcome steps.
+  const firstStart = !settings.onboarded && !hub && list?.length === 0;
+
+  if (firstStart) return <Redirect href="/welcome" />;
 
   return (
     <Tabs style={{ flex: 1, flexDirection: tablet ? 'row' : 'column-reverse', backgroundColor: t.background }}>

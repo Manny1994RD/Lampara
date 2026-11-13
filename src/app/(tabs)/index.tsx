@@ -1,48 +1,48 @@
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
-import { ReadingHeatmap } from '@/components/heatmap';
-import { ImportButton } from '@/components/import-button';
-import { Button, Card, Ionicons, ProgressBar, Row, Screen, SectionTitle, Txt, useIsTablet } from '@/components/ui';
+import { SyncBadge } from '@/components/sync-badge';
+import { Button, Card, Ionicons, ProgressBar, Row, Screen, Txt } from '@/components/ui';
 import { Fonts } from '@/constants/theme';
-import { BOOKS, TOTAL_CHAPTERS, bookName, getBook, refLabel } from '@/data/books';
+import { bookName, getBook, refLabel } from '@/data/books';
 import { useLive } from '@/hooks/use-live';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
 import { useT, type TKey } from '@/i18n';
 import { getBadges } from '@/lib/badges';
-import { GRACE_EVERY, getAllReadCounts, getReadingStats } from '@/lib/data';
+import { getReadingStats } from '@/lib/data';
+import { useHub } from '@/lib/hub';
 import { dayLabel, openChapter } from '@/lib/plan-format';
 import { getActivePlanProgress } from '@/lib/plans';
 import { useSettings } from '@/lib/settings';
 import { getVotd } from '@/lib/votd';
 
+/**
+ * Today: one clear path into reading.
+ * Greeting → continue where you stopped → today's reading → verse of the day.
+ * Streaks, badges and statistics live in Progress.
+ */
 export default function TodayScreen() {
   const t = useTheme();
   const { t: tr, tn, date } = useT();
-  const tablet = useIsTablet();
-  // Wide tablets and landscape: two columns instead of one long, stretched column.
-  const wide = useWindowDimensions().width >= 1100;
   const settings = useSettings();
+  const hub = useHub();
   const { list, current, lang } = useTranslations();
   const stats = useLive((db) => getReadingStats(db), [], ['reads']);
-  const counts = useLive((db) => getAllReadCounts(db), [], ['reads']);
   const plans = useLive((db) => getActivePlanProgress(db), [], ['plans', 'reads']);
   const votd = useLive((db) => getVotd(db, current?.id ?? null, lang), [current?.id, lang], ['translations']);
   const badges = useLive((db) => getBadges(db), [], ['reads', 'highlights', 'notes', 'topics', 'bookmarks', 'plans']);
 
   const seen = new Set(settings.seenBadges);
   const newBadges = badges?.filter((b) => b.earned && !seen.has(b.id)) ?? [];
-  const earnedCount = badges?.filter((b) => b.earned).length ?? 0;
-
-  const distinct = counts ? counts.size : 0;
-  const pct = distinct / TOTAL_CHAPTERS;
-  const completions = counts && counts.size === TOTAL_CHAPTERS ? Math.min(...counts.values()) : 0;
 
   const hour = new Date().getHours();
   const greeting = tr(hour < 12 ? 'greet.morning' : hour < 19 ? 'greet.afternoon' : 'greet.evening');
+  const firstName = hub?.user.name?.trim().split(/\s+/)[0];
 
-  // Next chapter after the last one read (used when there's no active plan).
+  // Where the reader is now (the last chapter opened).
+  const resume = { book: settings.book, ch: settings.chapter };
+  // Next chapter after the last one marked read (used when there's no active plan).
   const nextUp = (() => {
     const start = stats?.lastRead ?? { book: settings.book, ch: settings.chapter - 1 };
     let b = start.book;
@@ -53,219 +53,198 @@ export default function TodayScreen() {
     }
     return { book: b, ch: c };
   })();
+  const sameAsResume = nextUp.book === resume.book && nextUp.ch === resume.ch;
 
   const plan = plans?.[0];
   const planDay = plan?.nextDay;
+  const noBibles = list && list.length === 0;
 
-  const statTiles = [
-    { icon: 'flame' as const, value: stats?.streak ?? 0, label: tr('today.streak'), accent: true },
-    { icon: 'shield-checkmark-outline' as const, value: stats?.graceDays ?? 0, label: tr('today.graceDays') },
-    { icon: 'book-outline' as const, value: stats?.todayReads ?? 0, label: tr('today.chaptersToday') },
-    { icon: 'trophy-outline' as const, value: stats?.bestStreak ?? 0, label: tr('today.bestStreak') },
-  ];
+  const shareVerse = () => {
+    if (!votd?.text) return;
+    const message = `${votd.text}\n— ${votd.label}${current ? ` (${current.abbr})` : ''}`;
+    if (Platform.OS === 'web') {
+      if (navigator.share) navigator.share({ text: message }).catch(() => undefined);
+      else navigator.clipboard?.writeText(message);
+    } else Share.share({ message });
+  };
 
-  const head = (
-    <>
-      <Txt muted variant="small" style={{ textTransform: 'capitalize' }}>
-        {date(new Date(), { weekday: 'long', month: 'long', day: 'numeric' })}
-      </Txt>
-      <Txt variant="title" style={{ marginTop: 2, fontSize: 32 }}>
-        {greeting}
-      </Txt>
+  return (
+    <Screen maxWidth={720}>
+      <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <View style={{ flex: 1 }}>
+          <Txt muted variant="small">
+            {capitalize(date(new Date(), { weekday: 'long', month: 'long', day: 'numeric' }))}
+          </Txt>
+          <Txt variant="title" style={{ marginTop: 2, fontSize: 30 }}>
+            {firstName ? `${greeting}, ${firstName}` : greeting}
+          </Txt>
+        </View>
+        <SyncBadge style={{ marginTop: 4 }} />
+      </Row>
 
-      {list && list.length === 0 && (
+      {noBibles && (
         <Card style={{ marginTop: 18, gap: 12 }}>
           <Row>
-            <Ionicons name="flame" size={22} color={t.accent} />
-            <Txt variant="heading">{tr('welcome.title')}</Txt>
+            <Ionicons name="book" size={22} color={t.accent} />
+            <Txt variant="heading">{tr('today.chooseBible')}</Txt>
           </Row>
-          <Txt muted>{tr('welcome.body')}</Txt>
-          <ImportButton />
+          <Txt muted>{hub ? tr('today.chooseBibleHub') : tr('today.chooseBibleLocal')}</Txt>
+          <Button
+            icon="arrow-forward"
+            title={tr('today.chooseBibleButton')}
+            onPress={() => router.push({ pathname: '/welcome', params: { step: hub ? 'bible' : 'account' } })}
+          />
         </Card>
       )}
 
-      {/* New badge */}
-      {newBadges.length > 0 && (
-        <Card style={{ marginTop: 18, backgroundColor: t.accentSoft }} onPress={() => router.push('/badges')}>
-          <Row gap={12}>
-            <View style={[styles.medal, { backgroundColor: t.accent }]}>
-              <Ionicons name={newBadges[0].icon} size={24} color="#fff" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Txt variant="caption" color={t.accent} style={{ fontWeight: '800' }}>
-                {tr('today.newBadge')}
-                {newBadges.length > 1 ? ` +${newBadges.length - 1}` : ''}
-              </Txt>
-              <Txt variant="heading">{tr(`badge.${newBadges[0].id}` as TKey)}</Txt>
-              <Txt variant="small" muted>
-                {tr(`badge.${newBadges[0].id}.desc` as TKey)}
-              </Txt>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={t.textSecondary} />
-          </Row>
-        </Card>
-      )}
-    </>
-  );
-
-  const main = (
-    <>
-      {/* Verse of the day */}
-      {votd && votd.text ? (
-        <Pressable onPress={() => openChapter(votd.book, votd.ch)} style={({ pressed }) => [styles.votd, { backgroundColor: t.ink, opacity: pressed ? 0.9 : 1 }]}>
+      {/* 1. Continue reading */}
+      {!noBibles && (
+        <Card style={{ marginTop: 18, gap: 6 }} onPress={() => router.navigate('/read')}>
           <Row style={{ justifyContent: 'space-between' }}>
-            <Txt variant="caption" color={t.onInk} style={{ fontWeight: '800', opacity: 0.7, textTransform: 'uppercase' }}>
+            <View style={{ flex: 1 }}>
+              <Txt variant="caption" muted style={styles.kicker}>
+                {tr('today.continue')}
+              </Txt>
+              <Txt variant="title" style={{ fontSize: 26 }}>
+                {refLabel(resume.book, resume.ch, undefined, lang)}
+              </Txt>
+              {current && (
+                <Txt variant="small" muted>
+                  {current.abbr}
+                </Txt>
+              )}
+            </View>
+            <View style={[styles.roundGo, { backgroundColor: t.ink }]}>
+              <Ionicons name="play" size={22} color={t.onInk} style={{ marginLeft: 3 }} />
+            </View>
+          </Row>
+        </Card>
+      )}
+
+      {/* 2. Today's reading */}
+      {!noBibles &&
+        (plan && planDay ? (
+          <Card style={{ marginTop: 12, gap: 12 }}>
+            <Row style={{ justifyContent: 'space-between' }}>
+              <Txt variant="caption" muted style={[styles.kicker, { flex: 1 }]} numberOfLines={1}>
+                {tr('today.todaysReading')} · {plan.plan.name}
+              </Txt>
+              <Pressable onPress={() => router.push({ pathname: '/plan/[id]', params: { id: plan.plan.id } })} hitSlop={8}>
+                <Txt variant="small" style={{ fontWeight: '700' }}>
+                  {tr('today.viewPlan')}
+                </Txt>
+              </Pressable>
+            </Row>
+            <Txt variant="title" style={{ fontSize: 22 }}>
+              {dayLabel(planDay, lang)}
+            </Txt>
+            <Row style={{ flexWrap: 'wrap' }} gap={6}>
+              {planDay.chapters.map((c) => (
+                <Pressable
+                  key={`${c.book}:${c.ch}`}
+                  onPress={() => openChapter(c.book, c.ch)}
+                  style={({ pressed }) => [styles.pill, { backgroundColor: c.done ? t.ink : t.background, opacity: pressed ? 0.7 : 1 }]}>
+                  {c.done && <Ionicons name="checkmark" size={14} color={t.onInk} />}
+                  <Txt variant="small" color={c.done ? t.onInk : t.text} style={{ fontWeight: '600' }}>
+                    {bookName(c.book, lang)} {c.ch}
+                  </Txt>
+                </Pressable>
+              ))}
+            </Row>
+            <ProgressBar value={plan.doneChapters / plan.totalChapters} height={6} />
+            <Txt variant="small" muted>
+              {tr('today.dayOf', { day: planDay.index + 1, total: plan.plan.days })} ·{' '}
+              {plan.behind > 0 ? tn('today.behind', plan.behind) : `${tr('today.onTrack')} ✓`}
+            </Txt>
+          </Card>
+        ) : (
+          <Card style={{ marginTop: 12, gap: 10 }}>
+            <Txt variant="caption" muted style={styles.kicker}>
+              {tr('today.todaysReading')}
+            </Txt>
+            {!sameAsResume && (
+              <Pressable onPress={() => openChapter(nextUp.book, nextUp.ch)}>
+                <Row style={{ justifyContent: 'space-between' }}>
+                  <Txt variant="heading">
+                    {tr('today.upNext')}: {refLabel(nextUp.book, nextUp.ch, undefined, lang)}
+                  </Txt>
+                  <Ionicons name="chevron-forward" size={20} color={t.textSecondary} />
+                </Row>
+              </Pressable>
+            )}
+            <Txt variant="small" muted>
+              {tr('today.noPlanHint')}
+            </Txt>
+            <Button kind="secondary" small icon="calendar-outline" title={tr('today.startPlan')} onPress={() => router.push('/plans')} style={{ alignSelf: 'flex-start' }} />
+          </Card>
+        ))}
+
+      {/* 3. Verse of the day */}
+      {votd && votd.text ? (
+        <View style={[styles.votd, { backgroundColor: t.ink }]}>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Txt variant="caption" color={t.onInk} style={[styles.kicker, { opacity: 0.7 }]}>
               {tr('today.votd')}
             </Txt>
             <Ionicons name="flame" size={18} color={t.accent} />
           </Row>
           <Text style={[styles.votdText, { color: t.onInk, fontFamily: Fonts.serif }]}>{votd.text}</Text>
           <Txt variant="label" color={t.onInk} style={{ opacity: 0.85 }}>
-            {votd.label} · {current?.abbr}
+            {votd.label}
+            {current ? ` · ${current.abbr}` : ''}
           </Txt>
-        </Pressable>
-      ) : null}
-
-      {/* Today's reading */}
-      {plan && planDay ? (
-        <Card style={{ marginTop: 12, gap: 12 }}>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <Txt variant="caption" muted style={{ fontWeight: '700', flex: 1, textTransform: 'uppercase' }} numberOfLines={1}>
-              {tr('today.plan')} · {plan.plan.name}
-            </Txt>
-            <Pressable onPress={() => router.push({ pathname: '/plan/[id]', params: { id: plan.plan.id } })} hitSlop={8}>
-              <Txt variant="small" style={{ fontWeight: '700' }}>
-                {tr('today.viewPlan')}
+          <Row gap={8} style={{ flexWrap: 'wrap' }}>
+            <Pressable onPress={() => openChapter(votd.book, votd.ch)} style={({ pressed }) => [styles.inkButton, { borderColor: t.onInk, opacity: pressed ? 0.7 : 1 }]}>
+              <Ionicons name="book-outline" size={16} color={t.onInk} />
+              <Txt variant="small" color={t.onInk} style={{ fontWeight: '700' }}>
+                {tr('today.readInContext')}
+              </Txt>
+            </Pressable>
+            <Pressable onPress={shareVerse} style={({ pressed }) => [styles.inkButton, { borderColor: t.onInk, opacity: pressed ? 0.7 : 1 }]}>
+              <Ionicons name="share-outline" size={16} color={t.onInk} />
+              <Txt variant="small" color={t.onInk} style={{ fontWeight: '700' }}>
+                {tr('common.share')}
               </Txt>
             </Pressable>
           </Row>
-          <Txt variant="title" style={{ fontSize: 24 }}>
-            {dayLabel(planDay, lang)}
-          </Txt>
-          <Row style={{ flexWrap: 'wrap' }} gap={6}>
-            {planDay.chapters.map((c) => (
-              <Pressable
-                key={`${c.book}:${c.ch}`}
-                onPress={() => openChapter(c.book, c.ch)}
-                style={({ pressed }) => [styles.pill, { backgroundColor: c.done ? t.ink : t.background, opacity: pressed ? 0.7 : 1 }]}>
-                {c.done && <Ionicons name="checkmark" size={14} color={t.onInk} />}
-                <Txt variant="small" color={c.done ? t.onInk : t.text} style={{ fontWeight: '600' }}>
-                  {bookName(c.book, lang)} {c.ch}
-                </Txt>
-              </Pressable>
-            ))}
-          </Row>
-          <ProgressBar value={plan.doneChapters / plan.totalChapters} height={6} />
-          <Txt variant="small" muted>
-            {tr('today.dayOf', { day: planDay.index + 1, total: plan.plan.days })} ·{' '}
-            {plan.behind > 0 ? tn('today.behind', plan.behind) : `${tr('today.onTrack')} ✓`}
-          </Txt>
-        </Card>
-      ) : (
-        <Card style={{ marginTop: 12, gap: 12 }} onPress={() => openChapter(nextUp.book, nextUp.ch)}>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <View style={{ flex: 1 }}>
-              <Txt variant="caption" muted style={{ textTransform: 'uppercase', fontWeight: '700' }}>
-                {stats?.lastRead ? tr('today.upNext') : tr('today.startHere')}
-              </Txt>
-              <Txt variant="title" style={{ fontSize: 26 }}>
-                {refLabel(nextUp.book, nextUp.ch, undefined, lang)}
-              </Txt>
-            </View>
-            <View style={[styles.roundGo, { backgroundColor: t.ink }]}>
-              <Ionicons name="arrow-forward" size={22} color={t.onInk} />
-            </View>
-          </Row>
-          <Button kind="secondary" small icon="calendar-outline" title={tr('today.startPlan')} onPress={() => router.push('/plans')} style={{ alignSelf: 'flex-start' }} />
-        </Card>
-      )}
-
-      <View style={{ gap: 8, marginTop: 14 }}>
-        <Button icon="share-social-outline" title={tr('today.shareResults')} onPress={() => router.push('/results')} />
-        <Row>
-          <Button kind="secondary" icon="calendar-outline" title={tr('today.plans')} onPress={() => router.push('/plans')} style={{ flex: 1 }} />
-          <Button kind="secondary" icon="ribbon-outline" title={`${tr('today.badges')} · ${earnedCount}`} onPress={() => router.push('/badges')} style={{ flex: 1 }} />
-        </Row>
-      </View>
-    </>
-  );
-
-  const side = (
-    <>
-      {/* Stats */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: wide ? 18 : 12 }}>
-        {statTiles.map((s) => (
-          <Card key={s.label} style={{ flexGrow: 1, flexBasis: tablet && !wide ? '22%' : '45%', gap: 2 }}>
-            <Ionicons name={s.icon} size={20} color={s.accent ? t.accent : t.text} />
-            <Txt variant="title" style={{ fontSize: 28, marginTop: 4 }}>
-              {s.value}
-            </Txt>
-            <Txt variant="small" muted>
-              {s.label}
-            </Txt>
-          </Card>
-        ))}
-      </View>
-      <Txt variant="caption" muted style={{ marginTop: 8 }}>
-        {tr('today.graceExplain', { n: GRACE_EVERY })}
-      </Txt>
-
-      <SectionTitle>{tr('common.wholeBible')}</SectionTitle>
-      <Card style={{ gap: 10 }}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Txt variant="label">{tr('today.chaptersOf', { done: distinct, total: TOTAL_CHAPTERS })}</Txt>
-          <Txt variant="label" color={t.accent}>
-            {(pct * 100).toFixed(1)}%
-          </Txt>
-        </Row>
-        <ProgressBar value={pct} height={8} />
-        <Txt variant="small" muted>
-          {completions > 0
-            ? tn('today.bibleCompleted', completions)
-            : tr('today.otNt', { ot: countIn(counts, 'OT'), nt: countIn(counts, 'NT') })}
-        </Txt>
-        <Button kind="ghost" small icon="chevron-forward" title={tr('today.byBook')} onPress={() => router.navigate('/progress')} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} />
-      </Card>
-
-      <SectionTitle>{tr('today.readingDays')}</SectionTitle>
-      <Card>
-        <ReadingHeatmap days={stats?.days ?? new Map()} grace={stats?.graceUsed} weeks={tablet && !wide ? 30 : 18} />
-      </Card>
-    </>
-  );
-
-  return (
-    <Screen maxWidth={wide ? 1180 : 900}>
-      {head}
-      {wide ? (
-        <View style={{ flexDirection: 'row', gap: 24, alignItems: 'flex-start' }}>
-          <View style={{ flex: 3 }}>{main}</View>
-          <View style={{ flex: 2 }}>{side}</View>
         </View>
-      ) : (
-        <>
-          {main}
-          {side}
-        </>
+      ) : null}
+
+      {/* A quiet line about progress; the details are in Progress. */}
+      {!noBibles && (
+        <Pressable onPress={() => router.navigate('/progress')} style={({ pressed }) => [styles.progressLine, { borderColor: t.border, opacity: pressed ? 0.7 : 1 }]}>
+          <Ionicons name="flame" size={18} color={t.accent} />
+          <Txt variant="small" style={{ flex: 1 }}>
+            {tn('today.streakLine', stats?.streak ?? 0)} · {tn('today.todayLine', stats?.todayReads ?? 0)}
+          </Txt>
+          {newBadges.length > 0 && (
+            <Txt variant="caption" color={t.accent} style={{ fontWeight: '800' }}>
+              {tr('today.newBadge')}
+            </Txt>
+          )}
+          <Ionicons name="chevron-forward" size={18} color={t.textSecondary} />
+        </Pressable>
+      )}
+      {newBadges.length > 0 && (
+        <Txt variant="caption" muted style={{ marginTop: 6 }}>
+          {tr(`badge.${newBadges[0].id}` as TKey)}
+        </Txt>
       )}
     </Screen>
   );
 }
 
-function countIn(counts: Map<string, number> | undefined, testament: 'OT' | 'NT') {
-  if (!counts) return 0;
-  let n = 0;
-  for (const b of BOOKS) {
-    if (b.testament !== testament) continue;
-    for (let c = 1; c <= b.chapters; c++) if (counts.get(`${b.n}:${c}`)) n++;
-  }
-  return n;
+/** Only the first letter ("viernes, 13 de noviembre" → "Viernes, 13 de noviembre"). */
+function capitalize(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 const styles = StyleSheet.create({
-  medal: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  kicker: { textTransform: 'uppercase', fontWeight: '700' },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
-  votd: { marginTop: 18, borderRadius: 22, padding: 20, gap: 14 },
+  votd: { marginTop: 12, borderRadius: 22, padding: 20, gap: 14 },
   votdText: { fontSize: 21, lineHeight: 32 },
-  roundGo: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  roundGo: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
+  inkButton: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  progressLine: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 12, marginTop: 12 },
 });

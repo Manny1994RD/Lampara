@@ -60,6 +60,7 @@ import {
   type VerseRef,
 } from '@/lib/data';
 import { DEFAULT_NATURAL, getVoiceStatus } from '@/lib/hub-voice';
+import { getHub } from '@/lib/hub';
 import { getActivePlanProgress } from '@/lib/plans';
 import { updateSettings, useSettings, type Settings } from '@/lib/settings';
 
@@ -188,9 +189,16 @@ export default function ReadScreen() {
       <View style={[styles.flex, { backgroundColor: t.background, paddingTop: insets.top }]}>
         <Empty
           icon="book"
-          title="Add your first Bible"
-          body="Import an e-Sword Bible file (.bblx) from your device. It stays on this device only."
-          action={<View style={{ marginTop: 12 }}><ImportButton /></View>}
+          title={L('today.chooseBible')}
+          body={L('read.emptyBody')}
+          action={
+            <Button
+              icon="arrow-forward"
+              title={L('today.chooseBibleButton')}
+              onPress={() => router.push({ pathname: '/welcome', params: { step: getHub() ? 'bible' : 'account' } })}
+              style={{ marginTop: 12 }}
+            />
+          }
         />
       </View>
     );

@@ -50,8 +50,11 @@ export default function FriendsScreen() {
 
 function Connected() {
   const t = useTheme();
-  const { t: tr, tn } = useT();
+  const { t: tr, tn, date } = useT();
   const hub = useHub()!;
+  // The link opens the website's welcome steps with the code filled in.
+  const inviteMessage = (url: string, code: string) =>
+    tr('friends.inviteMessage', { link: `${url}/join?code=${code}`, url, code });
   const today = localDay();
   const challenges = useRemote(async () => {
     const [list, mine] = await Promise.all([listChallenges(), myMemberships()]);
@@ -88,7 +91,7 @@ function Connected() {
         <Button small kind="secondary" icon="add" title={tr('friends.newChallenge')} onPress={() => router.push('/challenge/new')} />
       </Row>
       <Txt muted variant="small">
-        Signed in as {hub.user.name} · your friend code{' '}
+        {tr('friends.signedInAs', { name: hub.user.name })}{' '}
         <Txt variant="small" color={t.accent} style={{ fontWeight: '700' }}>
           {hub.user.friend_code}
         </Txt>
@@ -126,8 +129,8 @@ function Connected() {
                 </Row>
                 <ProgressBar value={me ? me.progress / target : 0} color={me?.done ? t.success : t.accent} />
                 <Txt variant="small" muted>
-                  You: {me?.progress ?? 0}/{target} {c.goal === 'days' ? 'days' : 'chapters'}
-                  {me?.done ? ' · done 🏁' : ''}
+                  {tr('friends.you', { p: me?.progress ?? 0, t: target })} {c.goal === 'days' ? tr('challenge.unit.days') : tr('challenge.unit.chapters')}
+                  {me?.done ? ` · ${tr('friends.done')}` : ''}
                 </Txt>
               </Card>
             );
@@ -165,14 +168,14 @@ function Connected() {
             <Txt variant="label" style={{ flex: 1 }}>
               {f.user.name}
             </Txt>
-            <IconButton icon="person-remove-outline" size={18} label={`Remove ${f.user.name}`} color={t.textSecondary} onPress={() => removeFriend(f.friendshipId)} />
+            <IconButton icon="person-remove-outline" size={18} label={tr('friends.remove', { name: f.user.name })} color={t.textSecondary} onPress={() => removeFriend(f.friendshipId)} />
           </Row>
         ))}
         {outgoing.map((f) => (
           <Row key={f.friendshipId} style={[styles.row, { borderColor: t.border }]}>
             <Ionicons name="time-outline" size={24} color={t.textSecondary} />
             <Txt style={{ flex: 1 }} muted>
-              {f.user.name} · request sent
+              {f.user.name} · {tr('friends.requestSent')}
             </Txt>
             <IconButton icon="close" size={18} label={tr('friends.cancelRequest')} onPress={() => removeFriend(f.friendshipId)} />
           </Row>
@@ -205,7 +208,7 @@ function Connected() {
             title={tr('friends.newInvite')}
             onPress={async () => {
               const inv = await createInvite();
-              share(tr('friends.inviteMessage', { url: hub.url, code: inv.code }));
+              share(inviteMessage(hub.url, inv.code));
             }}
           />
         }>
@@ -222,11 +225,11 @@ function Connected() {
             </Txt>
             {inv.used_by ? (
               <Txt variant="small" muted>
-                used by {inv.expand?.used_by?.name ?? 'someone'}
+                {tr('friends.usedBy', { name: inv.expand?.used_by?.name ?? tr('friends.someone') })}
               </Txt>
             ) : (
               <>
-                <IconButton icon="share-outline" size={18} label={tr('friends.shareInvite')} onPress={() => share(`Join me on Lámpara 📖\nHub: ${hub.url}\nInvite code: ${inv.code}`)} />
+                <IconButton icon="share-outline" size={18} label={tr('friends.shareInvite')} onPress={() => share(inviteMessage(hub.url, inv.code))} />
                 <IconButton icon="trash-outline" size={18} label={tr('friends.deleteInvite')} color={t.textSecondary} onPress={() => deleteInvite(inv.id)} />
               </>
             )}
@@ -244,7 +247,7 @@ function Connected() {
                 {c.title}
               </Txt>
               <Txt variant="small" muted>
-                Ended {c.end_day}
+                {tr('friends.ended', { date: date(c.end_day) })}
               </Txt>
             </Card>
           ))}

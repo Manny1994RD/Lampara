@@ -1,7 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { useSyncExternalStore } from 'react';
 
 import { SYNC_TABLES, notify, nowIso, type Topic } from './db';
-import { getHub, hubFetch } from './hub';
+import { getHub, hubFetch, HubError } from './hub';
 
 /** Columns that are synced for each kind (everything the row needs to be rebuilt). */
 const COLUMNS: Record<string, string[]> = {
@@ -42,10 +43,44 @@ export type SyncResult = { pushed: number; pulled: number };
 
 let running: Promise<SyncResult> | null = null;
 
+/** What the last sync did, for the "Synced / Waiting for connection" label. */
+export type SyncPhase = 'syncing' | 'synced' | 'offline' | 'error' | 'idle';
+let phase: SyncPhase = 'idle';
+const phaseListeners = new Set<() => void>();
+function setPhase(p: SyncPhase) {
+  if (p === phase) return;
+  phase = p;
+  phaseListeners.forEach((l) => l());
+}
+export function useSyncPhase(): SyncPhase {
+  return useSyncExternalStore(
+    (cb) => {
+      phaseListeners.add(cb);
+      return () => phaseListeners.delete(cb);
+    },
+    () => phase,
+    () => phase
+  );
+}
+
 /** Push local changes, then pull everything new from the hub. Safe to call often. */
 export function syncNow(db: SQLiteDatabase): Promise<SyncResult> {
   if (!getHub()) return Promise.resolve({ pushed: 0, pulled: 0 });
-  if (!running) running = doSync(db).finally(() => (running = null));
+  if (!running) {
+    setPhase('syncing');
+    running = doSync(db)
+      .then(
+        (r) => {
+          setPhase('synced');
+          return r;
+        },
+        (e) => {
+          setPhase(e instanceof HubError && e.status === 0 ? 'offline' : 'error');
+          throw e;
+        }
+      )
+      .finally(() => (running = null));
+  }
   return running;
 }
 

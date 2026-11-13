@@ -49,6 +49,8 @@ export type Settings = {
   listenMini: boolean;
   /** Mark a chapter read after listening to the whole of it. */
   autoMarkListened: boolean;
+  /** Finished (or skipped) the first-start welcome steps. */
+  onboarded: boolean;
 };
 
 const DEFAULTS: Settings = {
@@ -79,6 +81,7 @@ const DEFAULTS: Settings = {
   parallelBible: null,
   listenMini: false,
   autoMarkListened: true,
+  onboarded: false,
 };
 
 const KEY = 'settings.v1';

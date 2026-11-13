@@ -3,12 +3,13 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 
 import { useLive } from '@/hooks/use-live';
-import { signOut, useHub } from '@/lib/hub';
+import { makeResetCode, signOut, useHub } from '@/lib/hub';
 import { updateChallengeProgress } from '@/lib/social';
 import { getSyncInfo, resetSyncState, syncNow } from '@/lib/sync';
-import { Alert, Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Platform, Pressable, Share, StyleSheet, Switch, TextInput, View } from 'react-native';
 
 import { ImportButton } from '@/components/import-button';
+import { SyncBadge } from '@/components/sync-badge';
 import { Button, Card, Chip, IconButton, Ionicons, Row, Screen, SectionTitle, Txt } from '@/components/ui';
 import { useTheme } from '@/hooks/use-theme';
 import { LANGUAGES, getT, useT } from '@/i18n';
@@ -90,12 +91,16 @@ export default function SettingsScreen() {
             {tr('bibles.defaultHint')}
           </Txt>
         )}
-        <View style={{ marginTop: 12 }}>
-          <ImportButton />
-        </View>
-        <Txt variant="caption" muted style={{ marginTop: 8 }}>
-          {tr('settings.bblxHint')}
-        </Txt>
+        {(!hub || canManage) && (
+          <>
+            <View style={{ marginTop: 12 }}>
+              <ImportButton />
+            </View>
+            <Txt variant="caption" muted style={{ marginTop: 8 }}>
+              {tr('settings.bblxHint')}
+            </Txt>
+          </>
+        )}
         {hub && (
           <Txt variant="caption" muted style={{ marginTop: 4 }}>
             {tr('bibles.hubHint')}
@@ -105,6 +110,7 @@ export default function SettingsScreen() {
 
       <SectionTitle>{tr('settings.hub')}</SectionTitle>
       <HubCard />
+      {hub && canManage && <ResetHelper />}
 
       <SectionTitle>{tr('settings.notifications')}</SectionTitle>
       {notificationsSupported ? (
@@ -325,9 +331,17 @@ function HubCard() {
 
   return (
     <Card style={{ gap: 8 }}>
-      <Txt variant="label">{hub.user.name}</Txt>
-      <Txt variant="small" muted>
-        {hub.user.email} · {hub.url}
+      <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <View style={{ flex: 1 }}>
+          <Txt variant="label">{hub.user.name}</Txt>
+          <Txt variant="small" muted>
+            {hub.user.email}
+          </Txt>
+        </View>
+        <SyncBadge />
+      </Row>
+      <Txt variant="caption" muted>
+        {tr('account.server')}: {hub.url}
       </Txt>
       <Txt variant="small" muted>
         {info?.lastSync ? tr('settings.lastSynced', { date: new Date(info.lastSync).toLocaleString(locale) }) : tr('settings.notSynced')}
@@ -371,6 +385,83 @@ function HubCard() {
           }}
         />
       </Row>
+    </Card>
+  );
+}
+
+/** Hub owner: make a one-time code for someone who forgot their password (the hub can't send emails). */
+function ResetHelper() {
+  const t = useTheme();
+  const { t: tr } = useT();
+  const [email, setEmail] = useState('');
+  const [result, setResult] = useState<{ code: string; name: string } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const message = result ? tr('account.resetMessage', { name: result.name, code: result.code }) : '';
+
+  return (
+    <Card style={{ gap: 8, marginTop: 10 }}>
+      <Txt variant="label">{tr('account.helpReset')}</Txt>
+      <Txt variant="small" muted>
+        {tr('account.helpResetHint')}
+      </Txt>
+      <Row>
+        <TextInput
+          value={email}
+          onChangeText={(v) => {
+            setEmail(v);
+            setResult(null);
+          }}
+          placeholder={tr('hub.email')}
+          placeholderTextColor={t.textSecondary}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.cardAlt }]}
+        />
+        <Button
+          small
+          icon="key-outline"
+          title={tr('account.makeCode')}
+          loading={busy}
+          disabled={!email.includes('@')}
+          onPress={async () => {
+            setErr(null);
+            setBusy(true);
+            try {
+              setResult(await makeResetCode(email));
+            } catch (e) {
+              setErr(e instanceof Error ? e.message : String(e));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      </Row>
+      {result && (
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Txt variant="title" style={{ letterSpacing: 3 }}>
+            {result.code}
+          </Txt>
+          <Button
+            small
+            kind="secondary"
+            icon="share-outline"
+            title={tr('common.share')}
+            onPress={() => {
+              if (Platform.OS === 'web') {
+                if (navigator.share) navigator.share({ text: message }).catch(() => undefined);
+                else navigator.clipboard?.writeText(message);
+              } else Share.share({ message });
+            }}
+          />
+        </Row>
+      )}
+      {err && (
+        <Txt variant="small" color={t.danger}>
+          {err}
+        </Txt>
+      )}
     </Card>
   );
 }
@@ -423,5 +514,6 @@ function NotifRow({
 }
 
 const styles = StyleSheet.create({
+  input: { flex: 1, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
 });
