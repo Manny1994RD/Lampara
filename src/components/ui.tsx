@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, HighlightColors, TABLET_BREAKPOINT, type HighlightColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useT } from '@/i18n';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -55,12 +56,12 @@ export function Txt({
 }
 
 const textStyles = StyleSheet.create({
-  title: { fontSize: 28, fontWeight: '700', fontFamily: Fonts.serif, letterSpacing: -0.3 },
-  heading: { fontSize: 19, fontWeight: '700' },
-  body: { fontSize: 16, lineHeight: 23 },
-  label: { fontSize: 15, fontWeight: '600' },
-  small: { fontSize: 14, lineHeight: 19 },
-  caption: { fontSize: 12, lineHeight: 16, letterSpacing: 0.3 },
+  title: { fontSize: 30, fontWeight: '800', fontFamily: Fonts.sans, letterSpacing: -0.6 },
+  heading: { fontSize: 18, fontWeight: '700', fontFamily: Fonts.sans, letterSpacing: -0.2 },
+  body: { fontSize: 16, lineHeight: 23, fontFamily: Fonts.sans },
+  label: { fontSize: 15, fontWeight: '600', fontFamily: Fonts.sans },
+  small: { fontSize: 14, lineHeight: 19, fontFamily: Fonts.sans },
+  caption: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, fontFamily: Fonts.sans },
   serif: { fontSize: 18, lineHeight: 28, fontFamily: Fonts.serif },
 });
 
@@ -100,7 +101,7 @@ export function Screen({
 
 export function Card({ children, style, onPress }: { children: ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void }) {
   const t = useTheme();
-  const base = [styles.card, { backgroundColor: t.card, borderColor: t.border }, style];
+  const base = [styles.card, { backgroundColor: t.card }, style];
   if (onPress)
     return (
       <Pressable onPress={onPress} style={({ pressed }) => [base, pressed && { opacity: 0.75 }]}>
@@ -116,10 +117,8 @@ export function Row({ children, style, gap = 8 }: { children: ReactNode; style?:
 
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
-    <Row style={{ marginTop: 24, marginBottom: 10, justifyContent: 'space-between' }}>
-      <Txt variant="caption" muted style={{ textTransform: 'uppercase', fontWeight: '700' }}>
-        {children}
-      </Txt>
+    <Row style={{ marginTop: 28, marginBottom: 12, justifyContent: 'space-between' }}>
+      <Txt variant="heading">{children}</Txt>
       {right}
     </Row>
   );
@@ -147,9 +146,9 @@ export function Button({
   small?: boolean;
 }) {
   const t = useTheme();
-  const bg =
-    kind === 'primary' ? t.accent : kind === 'secondary' ? t.accentSoft : kind === 'danger' ? 'transparent' : 'transparent';
-  const fg = kind === 'primary' ? t.onAccent : kind === 'danger' ? t.danger : t.accent;
+  // Primary = solid ink (black on light, white on dark); secondary = soft grey pill; ghost = text only.
+  const bg = kind === 'primary' ? t.ink : kind === 'secondary' ? t.cardAlt : 'transparent';
+  const fg = kind === 'primary' ? t.onInk : kind === 'danger' ? t.danger : t.text;
   return (
     <Pressable
       onPress={onPress}
@@ -198,10 +197,10 @@ export function IconButton({
       hitSlop={8}
       style={({ pressed }) => [
         styles.iconButton,
-        active && { backgroundColor: t.accentSoft },
+        active && { backgroundColor: t.cardAlt },
         pressed && { opacity: 0.6 },
       ]}>
-      <Ionicons name={icon} size={size} color={color ?? (active ? t.accent : t.text)} />
+      <Ionicons name={icon} size={size} color={color ?? t.text} />
     </Pressable>
   );
 }
@@ -226,14 +225,14 @@ export function Chip({
       style={({ pressed }) => [
         styles.chip,
         {
-          backgroundColor: selected ? t.accent : t.cardAlt,
-          borderColor: selected ? t.accent : t.border,
+          backgroundColor: selected ? t.ink : t.card,
+          borderColor: selected ? t.ink : t.border,
           opacity: pressed ? 0.75 : 1,
         },
       ]}>
       {color && <View style={[styles.dot, { backgroundColor: color }]} />}
-      {icon && <Ionicons name={icon} size={14} color={selected ? t.onAccent : t.text} />}
-      <Text style={{ color: selected ? t.onAccent : t.text, fontSize: 14, fontWeight: '600' }}>{label}</Text>
+      {icon && <Ionicons name={icon} size={14} color={selected ? t.onInk : t.text} />}
+      <Text style={{ color: selected ? t.onInk : t.text, fontSize: 14, fontWeight: '600', fontFamily: Fonts.sans }}>{label}</Text>
     </Pressable>
   );
 }
@@ -299,23 +298,24 @@ export function Sheet({
   children: ReactNode;
 }) {
   const t = useTheme();
+  const { t: tr } = useT();
   const tablet = useIsTablet();
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType={tablet ? 'fade' : 'slide'} onRequestClose={onClose}>
       <View style={[styles.backdrop, tablet && { justifyContent: 'center', alignItems: 'center' }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={tr('common.close')} />
         <View
           style={[
             styles.sheet,
-            { backgroundColor: t.card, paddingBottom: 20 + insets.bottom },
+            { backgroundColor: t.background, paddingBottom: 20 + insets.bottom },
             tablet && styles.dialog,
           ]}>
           <Row style={{ justifyContent: 'space-between', marginBottom: 12 }}>
             <Txt variant="heading" style={{ flex: 1 }} numberOfLines={1}>
               {title}
             </Txt>
-            <IconButton icon="close" label="Close" onPress={onClose} />
+            <IconButton icon="close" label={tr('common.close')} onPress={onClose} />
           </Row>
           <ScrollView style={{ flexGrow: 0 }} keyboardShouldPersistTaps="handled">
             {children}
@@ -351,38 +351,38 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, paddingBottom: 40 },
   inner: { width: '100%', alignSelf: 'center', flexGrow: 1 },
   padded: { paddingHorizontal: 16, paddingTop: 12 },
-  card: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 16 },
+  card: { borderRadius: 18, padding: 16 },
   button: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 12,
-    minHeight: 46,
+    paddingHorizontal: 22,
+    paddingVertical: 13,
+    borderRadius: 999,
+    minHeight: 48,
   },
-  buttonSmall: { paddingHorizontal: 12, paddingVertical: 7, minHeight: 34, borderRadius: 10 },
-  buttonText: { fontSize: 16, fontWeight: '700' },
-  iconButton: { padding: 8, borderRadius: 10 },
+  buttonSmall: { paddingHorizontal: 14, paddingVertical: 7, minHeight: 34 },
+  buttonText: { fontSize: 16, fontWeight: '700', fontFamily: Fonts.sans },
+  iconButton: { padding: 8, borderRadius: 999 },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
   },
   dot: { width: 10, height: 10, borderRadius: 5 },
   swatch: { width: 38, height: 38, borderRadius: 19, borderWidth: 1 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   sheet: {
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    padding: 20,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    padding: 22,
     maxHeight: '88%',
   },
-  dialog: { borderRadius: 22, width: 520, maxWidth: '92%', maxHeight: '85%' },
+  dialog: { borderRadius: 26, width: 520, maxWidth: '92%', maxHeight: '85%' },
   empty: { alignItems: 'center', gap: 10, paddingVertical: 48, paddingHorizontal: 24 },
 });

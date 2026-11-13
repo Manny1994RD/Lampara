@@ -5,6 +5,7 @@ import { Chip, Row, Sheet, Txt } from '@/components/ui';
 import { BOOKS, bookName, type Lang } from '@/data/books';
 import { useLive } from '@/hooks/use-live';
 import { useTheme } from '@/hooks/use-theme';
+import { useT } from '@/i18n';
 import { getAllReadCounts } from '@/lib/data';
 
 export function ChapterPicker({
@@ -21,6 +22,7 @@ export function ChapterPicker({
   onPick: (book: number, chapter: number) => void;
 }) {
   const t = useTheme();
+  const { t: L } = useT();
   const [testament, setTestament] = useState<'OT' | 'NT'>(book >= 40 ? 'NT' : 'OT');
   const [selected, setSelected] = useState<number | null>(null);
   const counts = useLive((db) => getAllReadCounts(db), [], ['reads']);
@@ -33,12 +35,12 @@ export function ChapterPicker({
   const selBook = selected ? BOOKS[selected - 1] : null;
 
   return (
-    <Sheet visible={visible} onClose={close} title={selBook ? bookName(selBook.n, lang) : lang === 'es' ? 'Libros' : 'Books'}>
+    <Sheet visible={visible} onClose={close} title={selBook ? bookName(selBook.n, lang) : L('picker.books')}>
       {!selBook ? (
         <>
           <Row style={{ marginBottom: 12 }}>
-            <Chip label={lang === 'es' ? 'Antiguo Testamento' : 'Old Testament'} selected={testament === 'OT'} onPress={() => setTestament('OT')} />
-            <Chip label={lang === 'es' ? 'Nuevo Testamento' : 'New Testament'} selected={testament === 'NT'} onPress={() => setTestament('NT')} />
+            <Chip label={L('common.oldTestament')} selected={testament === 'OT'} onPress={() => setTestament('OT')} />
+            <Chip label={L('common.newTestament')} selected={testament === 'NT'} onPress={() => setTestament('NT')} />
           </Row>
           <View style={styles.bookGrid}>
             {BOOKS.filter((b) => b.testament === testament).map((b) => {
@@ -72,7 +74,7 @@ export function ChapterPicker({
         <>
           <Pressable onPress={() => setSelected(null)} style={{ marginBottom: 12 }}>
             <Txt color={t.accent} variant="label">
-              ‹ {lang === 'es' ? 'Todos los libros' : 'All books'}
+              ‹ {L('picker.allBooks')}
             </Txt>
           </Pressable>
           <View style={styles.chGrid}>

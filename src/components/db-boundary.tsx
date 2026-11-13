@@ -1,6 +1,8 @@
 import { Component, type ReactNode } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
 
+import { getT } from '@/i18n';
+
 /**
  * Catches database start-up errors. On the web the database can only be open in one tab at a time,
  * and right after a reload the previous page may still be holding it for a moment — so we retry
@@ -35,17 +37,17 @@ export class DatabaseBoundary extends Component<
       return (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 14, backgroundColor: c.background }}>
           <Text style={{ color: c.text, fontSize: 20, fontWeight: '700', textAlign: 'center' }}>
-            {locked && Platform.OS === 'web' ? 'Lámpara is open in another tab' : 'Could not open your data'}
+            {locked && Platform.OS === 'web' ? getT().t('db.otherTab') : getT().t('db.cantOpen')}
           </Text>
           <Text style={{ color: c.text, opacity: 0.7, textAlign: 'center', maxWidth: 420 }}>
             {locked && Platform.OS === 'web'
-              ? 'Close the other tab (or window) that has Lámpara open, then try again.'
+              ? getT().t('db.otherTabHint')
               : failed.message}
           </Text>
           <Pressable
             onPress={() => this.setState({ attempt: 0, failed: null })}
             style={{ backgroundColor: c.accent, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 }}>
-            <Text style={{ color: '#fff', fontWeight: '700' }}>Try again</Text>
+            <Text style={{ color: '#fff', fontWeight: '700' }}>{getT().t('db.tryAgain')}</Text>
           </Pressable>
         </View>
       );

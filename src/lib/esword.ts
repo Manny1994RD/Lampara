@@ -218,7 +218,10 @@ export function plainComments(raw: string | null | undefined): string {
 const SPANISH_HINTS = /\b(el|los|las|del|que|y|en|por|para|dios|señor|jesús)\b/g;
 const ENGLISH_HINTS = /\b(the|and|of|that|lord|god|unto|shall|jesus|which)\b/g;
 
-export function guessLanguage(sample: string, description = ''): 'en' | 'es' {
+export function guessLanguage(sample: string, description = ''): 'en' | 'es' | 'ko' {
+  // Korean: mostly Hangul characters.
+  const hangul = (sample.match(/[가-힣]/g) ?? []).length;
+  if (hangul > 20 || /[가-힣]/.test(description)) return 'ko';
   if (/biblia|versi[oó]n|reina|nuevo testamento|traducci/i.test(description)) return 'es';
   const t = normalizeForSearch(sample);
   const es = (t.match(SPANISH_HINTS) ?? []).length;

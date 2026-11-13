@@ -5,6 +5,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 
 import { Button, Card, Chip, IconButton, Row, Screen, Txt } from '@/components/ui';
 import { useTheme } from '@/hooks/use-theme';
+import { useT } from '@/i18n';
 import { signIn, signUp, useHub } from '@/lib/hub';
 import { markAllForUpload, syncNow } from '@/lib/sync';
 
@@ -12,6 +13,7 @@ import { markAllForUpload, syncNow } from '@/lib/sync';
 export default function HubScreen() {
   const db = useSQLiteContext();
   const t = useTheme();
+  const { t: tr } = useT();
   const hub = useHub();
   const [mode, setMode] = useState<'signin' | 'join'>('signin');
   const [url, setUrl] = useState(hub?.url ?? '');
@@ -47,23 +49,22 @@ export default function HubScreen() {
   return (
     <Screen maxWidth={560}>
       <Row>
-        <IconButton icon="chevron-back" label="Back" onPress={back} />
+        <IconButton icon="chevron-back" label={tr('common.back')} onPress={back} />
         <Txt variant="title" style={{ flex: 1 }}>
-          Connect to your hub
+          {tr('settings.connect')}
         </Txt>
       </Row>
       <Txt muted style={{ marginBottom: 16 }}>
-        Your hub is the Lámpara server on your ZimaOS. It keeps your phone, tablet and the website in sync and powers
-        challenges with friends. Your Bible files never leave your devices.
+        {tr('hub.intro')}
       </Txt>
 
       <Row style={{ marginBottom: 14 }}>
-        <Chip label="Sign in" selected={mode === 'signin'} onPress={() => setMode('signin')} />
-        <Chip label="Join with an invite" selected={mode === 'join'} onPress={() => setMode('join')} />
+        <Chip label={tr('hub.signIn')} selected={mode === 'signin'} onPress={() => setMode('signin')} />
+        <Chip label={tr('hub.join')} selected={mode === 'join'} onPress={() => setMode('join')} />
       </Row>
 
       <Card style={{ gap: 10 }}>
-        <Txt variant="label">Hub address</Txt>
+        <Txt variant="label">{tr('hub.address')}</Txt>
         <TextInput
           value={url}
           onChangeText={setUrl}
@@ -76,11 +77,11 @@ export default function HubScreen() {
         />
         {mode === 'join' && (
           <>
-            <Txt variant="label">Your name</Txt>
-            <TextInput value={name} onChangeText={setName} placeholder="Name your friends will see" placeholderTextColor={t.textSecondary} style={input} />
+            <Txt variant="label">{tr('hub.yourName')}</Txt>
+            <TextInput value={name} onChangeText={setName} placeholder={tr('hub.namePlaceholder')} placeholderTextColor={t.textSecondary} style={input} />
           </>
         )}
-        <Txt variant="label">Email</Txt>
+        <Txt variant="label">{tr('hub.email')}</Txt>
         <TextInput
           value={email}
           onChangeText={setEmail}
@@ -90,25 +91,25 @@ export default function HubScreen() {
           textContentType="username"
           style={input}
         />
-        <Txt variant="label">Password</Txt>
+        <Txt variant="label">{tr('hub.password')}</Txt>
         <TextInput
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           textContentType={mode === 'join' ? 'newPassword' : 'password'}
-          placeholder="At least 8 characters"
+          placeholder={tr('hub.passwordHint')}
           placeholderTextColor={t.textSecondary}
           style={input}
         />
         {mode === 'join' && (
           <>
-            <Txt variant="label">Invite code</Txt>
+            <Txt variant="label">{tr('hub.invite')}</Txt>
             <TextInput
               value={invite}
               onChangeText={(v) => setInvite(v.toUpperCase())}
               autoCapitalize="characters"
               autoCorrect={false}
-              placeholder="From the person who invited you"
+              placeholder={tr('hub.invitePlaceholder')}
               placeholderTextColor={t.textSecondary}
               style={input}
             />
@@ -124,7 +125,7 @@ export default function HubScreen() {
             </Txt>
           </View>
         )}
-        <Button title={mode === 'signin' ? 'Sign in' : 'Create account'} icon="log-in-outline" loading={busy} disabled={!canSubmit} onPress={submit} />
+        <Button title={mode === 'signin' ? tr('hub.signIn') : tr('hub.createAccount')} icon="log-in-outline" loading={busy} disabled={!canSubmit} onPress={submit} />
       </Card>
     </Screen>
   );

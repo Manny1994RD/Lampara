@@ -9,7 +9,7 @@ export type Translation = {
   id: string;
   name: string;
   abbr: string;
-  lang: 'en' | 'es';
+  lang: 'en' | 'es' | 'ko';
   comments: string | null;
   verse_count: number;
   has_ot: number;

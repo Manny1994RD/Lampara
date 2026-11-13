@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { getBook } from '@/data/books';
+import { getT, type TKey } from '@/i18n';
 import { notify } from './db';
 import { getHub, hubFetch, listPath, pbq, type HubUser } from './hub';
 
@@ -54,11 +55,11 @@ export async function listFriends(): Promise<Friend[]> {
 export async function addFriendByCode(code: string) {
   const hub = getHub()!;
   const c = code.trim().toUpperCase();
-  if (c === hub.user.friend_code) throw new Error("That's your own friend code.");
+  if (c === hub.user.friend_code) throw new Error(getT().t('friends.err.ownCode'));
   const found = (await hubFetch<List<PBUser>>(listPath('users', { filter: `friend_code = ${pbq(c)}` }))).items[0];
-  if (!found) throw new Error('No one on this hub has that friend code.');
+  if (!found) throw new Error(getT().t('friends.err.noUser'));
   const existing = await listFriends();
-  if (existing.some((f) => f.user.id === found.id)) throw new Error(`You and ${found.name} are already connected.`);
+  if (existing.some((f) => f.user.id === found.id)) throw new Error(getT().t('friends.err.already', { name: found.name }));
   await hubFetch('/api/collections/friendships/records', {
     method: 'POST',
     body: { from: hub.user.id, to: found.id, status: 'pending' },
@@ -147,7 +148,7 @@ export async function createChallenge(
       body: { challenge: created.id, user: uid, progress: 0, done: false },
     });
   }
-  await postActivity(created.id, 'joined', `${me.name} started the challenge`);
+  await postActivity(created.id, 'joined', '');
   await updateChallengeProgress(db);
   notify('social');
   return created;
@@ -172,10 +173,29 @@ export async function postActivity(challenge: string, kind: Activity['kind'], te
 }
 
 export async function cheer(challenge: string, to: HubUser | PBUser, emoji: string, kind: 'cheer' | 'nudge' = 'cheer') {
-  const me = getHub()!.user;
-  const text =
-    kind === 'nudge' ? `${me.name} nudged ${to.name} — let's read today!` : `${me.name} cheered ${to.name} ${emoji}`;
-  await postActivity(challenge, kind, text, { target: to.id, emoji });
+  // The text is built by each reader in their own language (see activityText).
+  await postActivity(challenge, kind, '', { target: to.id, emoji });
+}
+
+/** Renders an activity entry in the viewer's language. */
+export function activityText(a: Activity, t: (key: TKey, vars?: Record<string, string | number>) => string, meId: string) {
+  const name = a.user === meId ? t('challenge.you') : (a.expand?.user?.name ?? t('challenge.friend'));
+  const target = a.target === meId ? t('challenge.you') : (a.expand?.target?.name ?? t('challenge.friend'));
+  switch (a.kind) {
+    case 'joined':
+      return t('activity.joined', { name });
+    case 'completed':
+      return t('activity.completed', { name });
+    case 'cheer':
+      return t('activity.cheer', { name, target, emoji: a.emoji });
+    case 'nudge':
+      return t('activity.nudge', { name, target });
+    case 'progress': {
+      const [pct, p, tt] = (a.text || '').split('|');
+      // Older entries stored a sentence; show it as-is.
+      return p ? t('activity.progress', { name, pct, p, t: tt }) : a.text;
+    }
+  }
 }
 
 /* ------------------------- progress from this device ------------------------- */
@@ -230,10 +250,10 @@ export async function updateChallengeProgress(db: SQLiteDatabase) {
     const before = m.progress / target;
     const after = progress / target;
     if (done && !m.done) {
-      await postActivity(c.id, 'completed', `${hub.user.name} completed the challenge! 🏁`);
+      await postActivity(c.id, 'completed', '');
     } else {
       const crossed = MILESTONES.filter((ms) => before < ms && after >= ms).pop();
-      if (crossed) await postActivity(c.id, 'progress', `${hub.user.name} is ${Math.round(crossed * 100)}% there (${progress}/${target})`);
+      if (crossed) await postActivity(c.id, 'progress', `${Math.round(crossed * 100)}|${progress}|${target}`);
     }
   }
   notify('social');

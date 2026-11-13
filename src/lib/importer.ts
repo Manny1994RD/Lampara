@@ -4,6 +4,7 @@ import { deserializeDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 import { Platform } from 'react-native';
 
 import { guessLanguage, normalizeForSearch, parseEswordVerse, plainComments } from './esword';
+import { getT } from '@/i18n';
 import { newId, notify, nowIso } from './db';
 
 export type ImportProgress = { stage: string; done: number; total: number };
@@ -49,12 +50,12 @@ export async function importBible(
   onProgress?: (p: ImportProgress) => void
 ): Promise<{ id: string; name: string; verses: number }> {
   if (!/\.bblx$/i.test(asset.name)) {
-    throw new ImportError(`"${asset.name}" is not an e-Sword Bible (.bblx) file.`);
+    throw new ImportError(getT().t('import.notBblx', { name: asset.name }));
   }
-  onProgress?.({ stage: 'Reading file', done: 0, total: 1 });
+  onProgress?.({ stage: getT().t('import.reading'), done: 0, total: 1 });
   const bytes = await readBytes(asset);
   const head = new TextDecoder().decode(bytes.slice(0, 15));
-  if (head !== 'SQLite format 3') throw new ImportError(`"${asset.name}" could not be read.`);
+  if (head !== 'SQLite format 3') throw new ImportError(getT().t('import.unreadable', { name: asset.name }));
 
   const src = await deserializeDatabaseAsync(bytes);
   try {
@@ -63,10 +64,7 @@ export async function importBible(
       'SELECT typeof(Scripture) AS t FROM Bible LIMIT 1 OFFSET 100'
     );
     if (!sampleType || sampleType.t !== 'text') {
-      throw new ImportError(
-        `"${asset.name}" is a locked (encrypted) e-Sword module, so its text can't be read. ` +
-          'Use a different copy of this translation.'
-      );
+      throw new ImportError(getT().t('import.locked', { name: asset.name }));
     }
 
     const rows = await src.getAllAsync<{ Book: number; Chapter: number; Verse: number; Scripture: string }>(
@@ -130,10 +128,10 @@ export async function importBible(
         if (r.Book <= 39) hasOT = true;
         else hasNT = true;
         if (pending >= 100) await flush();
-        if (i % BATCH === 0) onProgress?.({ stage: 'Importing verses', done: i, total });
+        if (i % BATCH === 0) onProgress?.({ stage: getT().t('import.importing'), done: i, total });
       }
       await flush();
-      if (count === 0) throw new ImportError(`"${asset.name}" has no readable verses.`);
+      if (count === 0) throw new ImportError(getT().t('import.noVerses', { name: asset.name }));
       await db.runAsync(
         `INSERT OR REPLACE INTO translations (id, name, abbr, lang, comments, verse_count, has_ot, has_nt, source_file, imported_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -149,7 +147,7 @@ export async function importBible(
         nowIso()
       );
     });
-    onProgress?.({ stage: 'Done', done: total, total });
+    onProgress?.({ stage: getT().t('import.done'), done: total, total });
     notify('translations');
     return { id, name, verses: count };
   } finally {

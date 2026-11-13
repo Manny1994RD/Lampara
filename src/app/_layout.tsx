@@ -52,6 +52,7 @@ export default function RootLayout() {
                   <Stack.Screen name="plan/[id]" />
                   <Stack.Screen name="badges" />
                   <Stack.Screen name="hub" />
+                  <Stack.Screen name="results" />
                   <Stack.Screen name="challenge/new" />
                   <Stack.Screen name="challenge/[id]" />
                 </Stack>

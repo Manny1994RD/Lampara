@@ -7,8 +7,10 @@ export type Settings = {
   fontSize: number;
   book: number;
   chapter: number;
+  /** Language of the app's menus and buttons ('auto' = the phone's language). */
+  appLanguage: 'auto' | 'en' | 'es' | 'ko';
   /** 'auto' = use the language of the current translation. */
-  bookNames: 'auto' | 'en' | 'es';
+  bookNames: 'auto' | 'en' | 'es' | 'ko';
   /** 'scroll' = continuous page, 'book' = pages you turn. */
   readerMode: 'scroll' | 'book';
   /** Paper background for the reader ('none' = app colors). */
@@ -32,6 +34,7 @@ const DEFAULTS: Settings = {
   fontSize: 19,
   book: 43,
   chapter: 1,
+  appLanguage: 'auto',
   bookNames: 'auto',
   readerMode: 'scroll',
   paper: 'cream',

@@ -7,6 +7,7 @@ import type { HighlightColor } from '@/constants/theme';
 import { refLabel, type Lang } from '@/data/books';
 import { useLive } from '@/hooks/use-live';
 import { useTheme } from '@/hooks/use-theme';
+import { useT } from '@/i18n';
 import {
   addWordHighlight,
   clearWordHighlights,
@@ -38,6 +39,7 @@ export function WordHighlightSheet({
 }) {
   const db = useSQLiteContext();
   const t = useTheme();
+  const { t: L } = useT();
   const [range, setRange] = useState<[number, number] | null>(null);
   const [color, setColor] = useState<HighlightColor>('yellow');
 
@@ -59,14 +61,10 @@ export function WordHighlightSheet({
     await addWordHighlight(db, verse, tr, words[range[0]].s, words[range[1]].e, color);
     setRange(null);
   };
-
-  const es = lang === 'es';
   return (
-    <Sheet visible onClose={onClose} title={`${es ? 'Resaltar palabras' : 'Highlight words'} · ${refLabel(verse.book, verse.ch, verse.v, lang)}`}>
+    <Sheet visible onClose={onClose} title={L('words.title', { ref: refLabel(verse.book, verse.ch, verse.v, lang) })}>
       <Txt muted variant="small" style={{ marginBottom: 12 }}>
-        {es
-          ? 'Toca la primera y la última palabra que quieres resaltar.'
-          : 'Tap the first and the last word you want to highlight.'}
+        {L('words.hint')}
       </Txt>
       <View style={styles.words}>
         {words.map((w, i) => {
@@ -91,14 +89,14 @@ export function WordHighlightSheet({
         })}
       </View>
       <Txt variant="label" style={{ marginTop: 18, marginBottom: 10 }}>
-        {es ? 'Color' : 'Color'}
+        {L('words.color')}
       </Txt>
       <ColorSwatches value={color} onChange={(c) => c && setColor(c)} />
       <Row style={{ marginTop: 20, flexWrap: 'wrap' }}>
-        <Button title={es ? 'Resaltar' : 'Highlight'} icon="color-wand" disabled={!range} onPress={save} />
+        <Button title={L('words.highlight')} icon="color-wand" disabled={!range} onPress={save} />
         {mine.length > 0 && (
           <Button
-            title={es ? 'Quitar resaltados de palabras' : 'Clear word highlights'}
+            title={L('words.clear')}
             kind="ghost"
             onPress={() => clearWordHighlights(db, verse, tr)}
           />
@@ -123,27 +121,27 @@ export function NoteSheet({
 }) {
   const db = useSQLiteContext();
   const t = useTheme();
+  const { t: L } = useT();
   const [body, setBody] = useState(initial);
   if (!verseRef) return null;
-  const es = lang === 'es';
   const save = async () => {
     await saveNote(db, verseRef, body);
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={`${es ? 'Nota' : 'Note'} · ${refLabel(verseRef.book, verseRef.ch, verseRef.v, lang)}`}>
+    <Sheet visible onClose={onClose} title={`${L('read.note')} · ${refLabel(verseRef.book, verseRef.ch, verseRef.v, lang)}`}>
       <TextInput
         value={body}
         onChangeText={setBody}
         multiline
         autoFocus
-        placeholder={es ? 'Lo que Dios te habla en este versículo…' : 'What is God showing you in this verse…'}
+        placeholder={L('note.placeholder')}
         placeholderTextColor={t.textSecondary}
         style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.cardAlt }]}
       />
       <Row style={{ marginTop: 14 }}>
-        <Button title={es ? 'Guardar' : 'Save'} icon="checkmark" onPress={save} />
-        {!!initial && <Button title={es ? 'Borrar nota' : 'Delete note'} kind="danger" onPress={() => { setBody(''); saveNote(db, verseRef, '').then(onClose); }} />}
+        <Button title={L('common.save')} icon="checkmark" onPress={save} />
+        {!!initial && <Button title={L('note.delete')} kind="danger" onPress={() => { setBody(''); saveNote(db, verseRef, '').then(onClose); }} />}
       </Row>
     </Sheet>
   );
@@ -154,6 +152,7 @@ export function NoteSheet({
 export function TopicSheet({ refs, lang, onClose }: { refs: VerseRef[] | null; lang: Lang; onClose: () => void }) {
   const db = useSQLiteContext();
   const t = useTheme();
+  const { t: L, tn } = useT();
   const topics = useLive((d) => getTopics(d), [], ['topics']);
   const first = refs?.[0];
   const memberOf = useLive(
@@ -164,7 +163,6 @@ export function TopicSheet({ refs, lang, onClose }: { refs: VerseRef[] | null; l
   const [name, setName] = useState('');
   const [color, setColor] = useState<HighlightColor>('blue');
   if (!refs || !first) return null;
-  const es = lang === 'es';
 
   const add = async () => {
     if (!name.trim()) return;
@@ -174,10 +172,10 @@ export function TopicSheet({ refs, lang, onClose }: { refs: VerseRef[] | null; l
   };
 
   const label =
-    refs.length === 1 ? refLabel(first.book, first.ch, first.v, lang) : `${refs.length} ${es ? 'versículos' : 'verses'}`;
+    refs.length === 1 ? refLabel(first.book, first.ch, first.v, lang) : tn('common.verses', refs.length);
 
   return (
-    <Sheet visible onClose={onClose} title={`${es ? 'Temas' : 'Topics'} · ${label}`}>
+    <Sheet visible onClose={onClose} title={`${L('library.topics')} · ${label}`}>
       {topics?.length ? (
         topics.map((tp) => {
           const on = memberOf?.has(tp.id) ?? false;
@@ -199,18 +197,16 @@ export function TopicSheet({ refs, lang, onClose }: { refs: VerseRef[] | null; l
         })
       ) : (
         <Txt muted style={{ marginBottom: 8 }}>
-          {es
-            ? 'Crea tu primer tema, por ejemplo "Ansiedad", "Fortaleza" o "Para orar por mi familia".'
-            : 'Create your first topic, like "Anxiety", "Strength" or "Praying for my family".'}
+          {L('topics.empty')}
         </Txt>
       )}
       <Txt variant="label" style={{ marginTop: 18, marginBottom: 8 }}>
-        {es ? 'Nuevo tema' : 'New topic'}
+        {L('topics.new')}
       </Txt>
       <TextInput
         value={name}
         onChangeText={setName}
-        placeholder={es ? 'Nombre del tema' : 'Topic name'}
+        placeholder={L('topics.name')}
         placeholderTextColor={t.textSecondary}
         onSubmitEditing={add}
         style={[styles.inputLine, { color: t.text, borderColor: t.border, backgroundColor: t.cardAlt }]}
@@ -218,7 +214,7 @@ export function TopicSheet({ refs, lang, onClose }: { refs: VerseRef[] | null; l
       <View style={{ marginTop: 12 }}>
         <ColorSwatches value={color} onChange={(c) => c && setColor(c)} />
       </View>
-      <Button title={es ? 'Crear y añadir' : 'Create & add'} icon="add" onPress={add} disabled={!name.trim()} style={{ marginTop: 14, alignSelf: 'flex-start' }} />
+      <Button title={L('topics.createAdd')} icon="add" onPress={add} disabled={!name.trim()} style={{ marginTop: 14, alignSelf: 'flex-start' }} />
     </Sheet>
   );
 }

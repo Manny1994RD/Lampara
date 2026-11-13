@@ -6,20 +6,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, useIsTablet, type IconName } from '@/components/ui';
 import { Fonts } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useT, type TKey } from '@/i18n';
 
 const TABS: {
   name: string;
   href: '/' | '/read' | '/progress' | '/library' | '/friends' | '/settings';
-  label: string;
+  label: TKey;
   icon: IconName;
   iconActive: IconName;
 }[] = [
-  { name: 'index', href: '/', label: 'Today', icon: 'sunny-outline', iconActive: 'sunny' },
-  { name: 'read', href: '/read', label: 'Read', icon: 'book-outline', iconActive: 'book' },
-  { name: 'progress', href: '/progress', label: 'Progress', icon: 'grid-outline', iconActive: 'grid' },
-  { name: 'library', href: '/library', label: 'Verses', icon: 'bookmarks-outline', iconActive: 'bookmarks' },
-  { name: 'friends', href: '/friends', label: 'Friends', icon: 'people-outline', iconActive: 'people' },
-  { name: 'settings', href: '/settings', label: 'Settings', icon: 'settings-outline', iconActive: 'settings' },
+  { name: 'index', href: '/', label: 'tab.today', icon: 'sunny-outline', iconActive: 'sunny' },
+  { name: 'read', href: '/read', label: 'tab.read', icon: 'book-outline', iconActive: 'book' },
+  { name: 'progress', href: '/progress', label: 'tab.progress', icon: 'grid-outline', iconActive: 'grid' },
+  { name: 'library', href: '/library', label: 'tab.verses', icon: 'bookmarks-outline', iconActive: 'bookmarks' },
+  { name: 'friends', href: '/friends', label: 'tab.friends', icon: 'people-outline', iconActive: 'people' },
+  { name: 'settings', href: '/settings', label: 'tab.settings', icon: 'settings-outline', iconActive: 'settings' },
 ];
 
 export default function TabsLayout() {
@@ -32,7 +33,7 @@ export default function TabsLayout() {
       <TabList
         style={[
           tablet ? styles.rail : styles.bar,
-          { backgroundColor: t.card, borderColor: t.border },
+          { backgroundColor: t.background, borderColor: t.border },
           tablet ? { paddingTop: insets.top + 16, paddingLeft: insets.left } : { paddingBottom: insets.bottom + 4 },
         ]}>
         {tablet && (
@@ -60,24 +61,25 @@ function TabButton({
   ...props
 }: TabTriggerSlotProps & { tab?: (typeof TABS)[number]; tablet?: boolean }) {
     const t = useTheme();
-    const color = isFocused ? t.accent : t.textSecondary;
+    const { t: tr } = useT();
+    const color = isFocused ? t.text : t.textSecondary;
     if (!tab) return null;
     return (
       <Pressable
         ref={ref as ComponentProps<typeof Pressable>['ref']}
         {...props}
         accessibilityRole="tab"
-        accessibilityLabel={tab.label}
+        accessibilityLabel={tr(tab.label)}
         style={({ pressed }) => [
           tablet ? styles.railItem : styles.barItem,
-          tablet && isFocused && { backgroundColor: t.accentSoft },
+          tablet && isFocused && { backgroundColor: t.card },
           pressed && { opacity: 0.7 },
         ]}>
         <Ionicons name={isFocused ? tab.iconActive : tab.icon} size={tablet ? 22 : 24} color={color} />
         <Text
           numberOfLines={1}
           style={[tablet ? styles.railLabel : styles.barLabel, { color, fontWeight: isFocused ? '700' : '500' }]}>
-          {tab.label}
+          {tr(tab.label)}
         </Text>
       </Pressable>
     );
@@ -99,7 +101,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, marginBottom: 20 },
-  brandText: { fontSize: 22, fontWeight: '700', fontFamily: Fonts.serif },
+  brandText: { fontSize: 22, fontWeight: '700', fontFamily: Fonts.sans },
   railItem: {
     flexDirection: 'row',
     alignItems: 'center',

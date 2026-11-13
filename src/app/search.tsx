@@ -7,12 +7,13 @@ import { Chip, Empty, IconButton, Row, Screen, Txt } from '@/components/ui';
 import { useLive } from '@/hooks/use-live';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
+import { useT } from '@/i18n';
 import { searchVerses } from '@/lib/data';
 
 export default function SearchScreen() {
   const t = useTheme();
   const { current, lang } = useTranslations();
-  const es = lang === 'es';
+  const { t: tr, tn } = useT();
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
   const [scope, setScope] = useState<'all' | 'OT' | 'NT'>('all');
@@ -31,9 +32,9 @@ export default function SearchScreen() {
   return (
     <Screen>
       <Row>
-        <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.navigate('/read'))} />
+        <IconButton icon="chevron-back" label={tr('common.back')} onPress={() => (router.canGoBack() ? router.back() : router.navigate('/read'))} />
         <Txt variant="title" style={{ flex: 1 }}>
-          {es ? 'Buscar' : 'Search'}
+          {tr('read.search')}
         </Txt>
         {current && (
           <Txt variant="label" muted>
@@ -45,24 +46,24 @@ export default function SearchScreen() {
         value={q}
         onChangeText={setQ}
         autoFocus
-        placeholder={es ? 'Palabras… (ej. "amor paciente")' : 'Words… (e.g. "love patient")'}
+        placeholder={tr('search.placeholder')}
         placeholderTextColor={t.textSecondary}
         style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.card }]}
         returnKeyType="search"
       />
       <Row style={{ marginVertical: 12 }}>
-        <Chip label={es ? 'Toda la Biblia' : 'Whole Bible'} selected={scope === 'all'} onPress={() => setScope('all')} />
-        <Chip label={es ? 'A.T.' : 'OT'} selected={scope === 'OT'} onPress={() => setScope('OT')} />
-        <Chip label={es ? 'N.T.' : 'NT'} selected={scope === 'NT'} onPress={() => setScope('NT')} />
+        <Chip label={tr('common.wholeBible')} selected={scope === 'all'} onPress={() => setScope('all')} />
+        <Chip label={tr('common.ot')} selected={scope === 'OT'} onPress={() => setScope('OT')} />
+        <Chip label={tr('common.nt')} selected={scope === 'NT'} onPress={() => setScope('NT')} />
       </Row>
       {debounced.trim().length >= 2 && results && (
         <Txt variant="small" muted style={{ marginBottom: 8 }}>
-          {results.length >= 300 ? '300+' : results.length} {es ? 'resultados' : 'results'}
+          {results.length >= 300 ? tr('search.results_other', { n: '300+' }) : tn('search.results', results.length)}
         </Txt>
       )}
       <View style={{ gap: 10 }}>
         {debounced.trim().length < 2 ? (
-          <Empty icon="search" title={es ? 'Busca en la Biblia' : 'Search the Bible'} body={es ? 'No importan los acentos ni las mayúsculas.' : 'Accents and capital letters don’t matter.'} />
+          <Empty icon="search" title={tr('search.emptyTitle')} body={tr('search.emptyHint')} />
         ) : (
           results?.map((r) => <VerseListItem key={`${r.book}:${r.ch}:${r.v}`} book={r.book} ch={r.ch} v={r.v} text={r.text} lang={lang} />)
         )}

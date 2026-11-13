@@ -43,13 +43,14 @@ function expand(segments: Segment[]): ChapterRef[] {
 
 export type PlanKind = 'canonical' | 'chronological' | 'nt' | 'ot' | 'gospels' | 'psalms-proverbs' | 'custom';
 
-export const PLAN_KINDS: { kind: Exclude<PlanKind, 'custom'>; en: string; es: string; days: number; descEn: string; descEs: string }[] = [
-  { kind: 'chronological', en: 'Chronological', es: 'Cronológico', days: 365, descEn: 'The whole Bible in the order events happened.', descEs: 'Toda la Biblia en el orden en que ocurrieron los hechos.' },
-  { kind: 'canonical', en: 'Genesis to Revelation', es: 'De Génesis a Apocalipsis', days: 365, descEn: 'The whole Bible in book order.', descEs: 'Toda la Biblia en el orden de los libros.' },
-  { kind: 'nt', en: 'New Testament', es: 'Nuevo Testamento', days: 90, descEn: 'Matthew to Revelation.', descEs: 'De Mateo a Apocalipsis.' },
-  { kind: 'ot', en: 'Old Testament', es: 'Antiguo Testamento', days: 270, descEn: 'Genesis to Malachi.', descEs: 'De Génesis a Malaquías.' },
-  { kind: 'gospels', en: 'The Gospels', es: 'Los Evangelios', days: 30, descEn: 'Matthew, Mark, Luke and John.', descEs: 'Mateo, Marcos, Lucas y Juan.' },
-  { kind: 'psalms-proverbs', en: 'Psalms & Proverbs', es: 'Salmos y Proverbios', days: 60, descEn: 'Wisdom and prayer.', descEs: 'Sabiduría y oración.' },
+/** Built-in plans (names come from the i18n dictionaries: plans.kind.<kind>). */
+export const PLAN_KINDS: { kind: Exclude<PlanKind, 'custom'>; days: number }[] = [
+  { kind: 'chronological', days: 365 },
+  { kind: 'canonical', days: 365 },
+  { kind: 'nt', days: 90 },
+  { kind: 'ot', days: 270 },
+  { kind: 'gospels', days: 30 },
+  { kind: 'psalms-proverbs', days: 60 },
 ];
 
 /** Ordered chapter list for a plan. `books` is used for custom plans (in the order given). */

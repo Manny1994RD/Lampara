@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Txt } from '@/components/ui';
 import { useTheme } from '@/hooks/use-theme';
+import { useT } from '@/i18n';
 import { localDay } from '@/lib/db';
 
 /** GitHub-style calendar of reading days (last N weeks). */
@@ -16,6 +17,7 @@ export function ReadingHeatmap({
   grace?: Set<string>;
 }) {
   const t = useTheme();
+  const { t: tr } = useT();
   const today = new Date();
   const start = new Date(today);
   start.setDate(start.getDate() - (weeks * 7 - 1) - today.getDay());
@@ -59,13 +61,13 @@ export function ReadingHeatmap({
       </View>
       <View style={[styles.legend]}>
         <Txt variant="caption" muted>
-          Less
+          {tr('common.less')}
         </Txt>
         {[0, 1, 2, 3, 4].map((n) => (
           <View key={n} style={[styles.cell, { backgroundColor: shade(n) }]} />
         ))}
         <Txt variant="caption" muted>
-          More
+          {tr('common.more')}
         </Txt>
       </View>
     </View>

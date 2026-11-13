@@ -9,6 +9,7 @@ import type { HighlightColor } from '@/constants/theme';
 import { useLive } from '@/hooks/use-live';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
+import { useT } from '@/i18n';
 import { deleteTopic, getTopicVerses, getTopics, getVerseTexts, refKey, renameTopic, setVerseInTopic } from '@/lib/data';
 
 export default function TopicScreen() {
@@ -16,7 +17,7 @@ export default function TopicScreen() {
   const db = useSQLiteContext();
   const t = useTheme();
   const { current, lang } = useTranslations();
-  const es = lang === 'es';
+  const { t: tr } = useT();
   const topic = useLive(async (d) => (await getTopics(d)).find((x) => x.id === id) ?? null, [id], ['topics']);
   const verses = useLive(
     async (d) => {
@@ -34,14 +35,14 @@ export default function TopicScreen() {
   const back = () => (router.canGoBack() ? router.back() : router.navigate('/library'));
 
   const remove = async () => {
-    const msg = es ? 'Los versículos no se borran, solo el tema.' : 'The verses themselves are not deleted, only the topic.';
+    const msg = tr('topic.deleteBody');
     const ok =
       Platform.OS === 'web'
         ? window.confirm(msg)
         : await new Promise<boolean>((r) =>
-            Alert.alert(es ? '¿Borrar tema?' : 'Delete topic?', msg, [
-              { text: 'Cancel', style: 'cancel', onPress: () => r(false) },
-              { text: 'Delete', style: 'destructive', onPress: () => r(true) },
+            Alert.alert(tr('topic.deleteTitle'), msg, [
+              { text: tr('common.cancel'), style: 'cancel', onPress: () => r(false) },
+              { text: tr('common.delete'), style: 'destructive', onPress: () => r(true) },
             ])
           );
     if (ok) {
@@ -53,13 +54,13 @@ export default function TopicScreen() {
   return (
     <Screen>
       <Row>
-        <IconButton icon="chevron-back" label="Back" onPress={back} />
+        <IconButton icon="chevron-back" label={tr('common.back')} onPress={back} />
         <Txt variant="title" style={{ flex: 1 }} numberOfLines={2}>
           {topic?.name ?? ''}
         </Txt>
         <IconButton
           icon="create-outline"
-          label="Edit topic"
+          label={tr('topic.edit')}
           onPress={() => {
             if (!topic) return;
             setName(topic.name);
@@ -67,14 +68,14 @@ export default function TopicScreen() {
             setEdit(true);
           }}
         />
-        <IconButton icon="trash-outline" label="Delete topic" color={t.danger} onPress={remove} />
+        <IconButton icon="trash-outline" label={tr('common.delete')} color={t.danger} onPress={remove} />
       </Row>
       <View style={{ gap: 10, marginTop: 12 }}>
         {verses && verses.length === 0 ? (
           <Empty
             icon="pricetag-outline"
-            title={es ? 'Este tema está vacío' : 'This topic is empty'}
-            body={es ? 'En el lector, toca un versículo → Tema.' : 'In the reader, tap a verse → Topic.'}
+            title={tr('topic.empty')}
+            body={tr('topic.emptyHint')}
           />
         ) : (
           verses?.map((v) => (
@@ -86,13 +87,13 @@ export default function TopicScreen() {
               text={v.text}
               lang={lang}
               color={topic?.color}
-              right={<IconButton icon="close" size={18} label="Remove from topic" onPress={() => setVerseInTopic(db, id, [v], false)} />}
+              right={<IconButton icon="close" size={18} label={tr('topic.removeVerse')} onPress={() => setVerseInTopic(db, id, [v], false)} />}
             />
           ))
         )}
       </View>
 
-      <Sheet visible={edit} onClose={() => setEdit(false)} title={es ? 'Editar tema' : 'Edit topic'}>
+      <Sheet visible={edit} onClose={() => setEdit(false)} title={tr('topic.edit')}>
         <TextInput
           value={name}
           onChangeText={setName}
@@ -102,7 +103,7 @@ export default function TopicScreen() {
           <ColorSwatches value={color} onChange={(c) => c && setColor(c)} />
         </View>
         <Button
-          title={es ? 'Guardar' : 'Save'}
+          title={tr('common.save')}
           disabled={!name.trim()}
           onPress={async () => {
             await renameTopic(db, id, name, color);

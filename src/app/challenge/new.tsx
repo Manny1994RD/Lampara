@@ -4,9 +4,10 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Button, Card, Chip, IconButton, Ionicons, Row, Screen, Txt } from '@/components/ui';
-import { BOOKS, bookName } from '@/data/books';
+import { BOOKS, bookAbbr, bookName } from '@/data/books';
 import { useRemote } from '@/hooks/use-remote';
 import { useTheme } from '@/hooks/use-theme';
+import { useT } from '@/i18n';
 import { useTranslations } from '@/hooks/use-translation';
 import { localDay } from '@/lib/db';
 import { challengeTarget, createChallenge, listFriends, type Goal } from '@/lib/social';
@@ -16,6 +17,7 @@ const LENGTHS = [7, 14, 21, 30, 40];
 export default function NewChallengeScreen() {
   const db = useSQLiteContext();
   const t = useTheme();
+  const { t: tr } = useT();
   const { lang } = useTranslations();
   const friends = useRemote(() => listFriends(), []);
   const accepted = friends.data?.filter((f) => f.status === 'accepted') ?? [];
@@ -39,12 +41,14 @@ export default function NewChallengeScreen() {
 
   const suggestedTitle =
     goal === 'chapters'
-      ? `${targetNum} chapters in ${days} days`
+      ? tr('challenge.title.chapters', { n: targetNum, d: days })
       : goal === 'days'
-        ? `Read ${targetNum} of ${days} days`
-        : books.length
-          ? `Finish ${books.map((b) => bookName(b, lang)).slice(0, 3).join(', ')}${books.length > 3 ? '…' : ''}`
-          : 'Finish books';
+        ? tr('challenge.title.days', { n: targetNum, d: days })
+        : tr('challenge.title.books', {
+            books: books.length
+              ? `${books.map((b) => bookName(b, lang)).slice(0, 3).join(', ')}${books.length > 3 ? '…' : ''}`
+              : '…',
+          });
 
   const save = async () => {
     setBusy(true);
@@ -76,29 +80,29 @@ export default function NewChallengeScreen() {
   return (
     <Screen maxWidth={640}>
       <Row>
-        <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.navigate('/friends'))} />
+        <IconButton icon="chevron-back" label={tr('common.back')} onPress={() => (router.canGoBack() ? router.back() : router.navigate('/friends'))} />
         <Txt variant="title" style={{ flex: 1 }}>
-          New challenge
+          {tr('friends.newChallenge')}
         </Txt>
       </Row>
 
       <View style={{ gap: 14, marginTop: 8 }}>
-        <Txt variant="label">Goal</Txt>
+        <Txt variant="label">{tr('challenge.goal')}</Txt>
         <Row style={{ flexWrap: 'wrap' }}>
-          <Chip icon="book-outline" label="Read chapters" selected={goal === 'chapters'} onPress={() => setGoal('chapters')} />
-          <Chip icon="calendar-outline" label="Read on days" selected={goal === 'days'} onPress={() => { setGoal('days'); setTarget(String(days)); }} />
-          <Chip icon="library-outline" label="Finish books" selected={goal === 'books'} onPress={() => setGoal('books')} />
+          <Chip icon="book-outline" label={tr('challenge.goal.chapters')} selected={goal === 'chapters'} onPress={() => setGoal('chapters')} />
+          <Chip icon="calendar-outline" label={tr('challenge.goal.days')} selected={goal === 'days'} onPress={() => { setGoal('days'); setTarget(String(days)); }} />
+          <Chip icon="library-outline" label={tr('challenge.goal.books')} selected={goal === 'books'} onPress={() => setGoal('books')} />
         </Row>
 
-        <Txt variant="label">Length</Txt>
+        <Txt variant="label">{tr('challenge.length')}</Txt>
         <Row style={{ flexWrap: 'wrap' }}>
           {LENGTHS.map((d) => (
             <Chip key={d} label={`${d} days`} selected={days === d} onPress={() => { setDays(d); if (goal === 'days') setTarget(String(d)); }} />
           ))}
         </Row>
         <Row>
-          <Chip label="Start today" selected={!startTomorrow} onPress={() => setStartTomorrow(false)} />
-          <Chip label="Start tomorrow" selected={startTomorrow} onPress={() => setStartTomorrow(true)} />
+          <Chip label={tr('challenge.startToday')} selected={!startTomorrow} onPress={() => setStartTomorrow(false)} />
+          <Chip label={tr('challenge.startTomorrow')} selected={startTomorrow} onPress={() => setStartTomorrow(true)} />
         </Row>
         <Txt variant="small" muted>
           {localDay(start)} → {localDay(end)}
@@ -106,12 +110,12 @@ export default function NewChallengeScreen() {
 
         {goal !== 'books' ? (
           <>
-            <Txt variant="label">{goal === 'chapters' ? 'How many chapters?' : 'On how many days?'}</Txt>
+            <Txt variant="label">{goal === 'chapters' ? tr('challenge.howManyChapters') : tr('challenge.howManyDays')}</Txt>
             <TextInput value={target} onChangeText={(v) => setTarget(v.replace(/\D/g, ''))} keyboardType="number-pad" style={[input, { width: 120 }]} />
           </>
         ) : (
           <>
-            <Txt variant="label">Which books?</Txt>
+            <Txt variant="label">{tr('challenge.whichBooks')}</Txt>
             <View style={styles.bookWrap}>
               {BOOKS.map((b) => {
                 const on = books.includes(b.n);
@@ -121,7 +125,7 @@ export default function NewChallengeScreen() {
                     onPress={() => setBooks(on ? books.filter((x) => x !== b.n) : [...books, b.n].sort((a, c) => a - c))}
                     style={[styles.bookChip, { backgroundColor: on ? t.accent : t.cardAlt }]}>
                     <Txt variant="caption" color={on ? t.onAccent : t.text} style={{ fontWeight: '600' }}>
-                      {lang === 'es' ? b.esAbbr : b.enAbbr}
+                      {bookAbbr(b.n, lang)}
                     </Txt>
                   </Pressable>
                 );
@@ -133,15 +137,15 @@ export default function NewChallengeScreen() {
           </>
         )}
 
-        <Txt variant="label">Name</Txt>
+        <Txt variant="label">{tr('plans.name')}</Txt>
         <TextInput value={title} onChangeText={setTitle} placeholder={suggestedTitle} placeholderTextColor={t.textSecondary} style={input} />
-        <Txt variant="label">Message (optional)</Txt>
-        <TextInput value={message} onChangeText={setMessage} placeholder="Let's do this together! 💪" placeholderTextColor={t.textSecondary} style={input} />
+        <Txt variant="label">{tr('challenge.message')}</Txt>
+        <TextInput value={message} onChangeText={setMessage} placeholder={tr('challenge.messagePlaceholder')} placeholderTextColor={t.textSecondary} style={input} />
 
-        <Txt variant="label">Invite friends</Txt>
+        <Txt variant="label">{tr('challenge.inviteFriends')}</Txt>
         {accepted.length === 0 ? (
           <Txt variant="small" muted>
-            Add friends first on the Friends screen — or start it on your own.
+            {tr('challenge.noFriends')}
           </Txt>
         ) : (
           <Card style={{ gap: 2 }}>
@@ -167,7 +171,7 @@ export default function NewChallengeScreen() {
             {error}
           </Txt>
         )}
-        <Button title="Start challenge" icon="flag" loading={busy} disabled={targetNum < 1} onPress={save} />
+        <Button title={tr('challenge.start')} icon="flag" loading={busy} disabled={targetNum < 1} onPress={save} />
       </View>
     </Screen>
   );

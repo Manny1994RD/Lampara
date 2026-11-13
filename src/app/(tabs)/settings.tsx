@@ -11,6 +11,7 @@ import { Alert, Platform, Pressable, StyleSheet, Switch, View } from 'react-nati
 import { ImportButton } from '@/components/import-button';
 import { Button, Card, Chip, IconButton, Ionicons, Row, Screen, SectionTitle, Txt } from '@/components/ui';
 import { useTheme } from '@/hooks/use-theme';
+import { LANGUAGES, getT, useT } from '@/i18n';
 import { useTranslations } from '@/hooks/use-translation';
 import { deleteTranslation } from '@/lib/importer';
 import { ensureNotificationPermission, notificationsSupported } from '@/lib/notifications';
@@ -20,8 +21,8 @@ function confirm(title: string, msg: string): Promise<boolean> {
   if (Platform.OS === 'web') return Promise.resolve(window.confirm(`${title}\n\n${msg}`));
   return new Promise((resolve) =>
     Alert.alert(title, msg, [
-      { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-      { text: 'Remove', style: 'destructive', onPress: () => resolve(true) },
+      { text: getT().t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+      { text: getT().t('common.remove'), style: 'destructive', onPress: () => resolve(true) },
     ])
   );
 }
@@ -29,18 +30,32 @@ function confirm(title: string, msg: string): Promise<boolean> {
 export default function SettingsScreen() {
   const db = useSQLiteContext();
   const t = useTheme();
+  const { t: tr } = useT();
   const settings = useSettings();
   const { list, current } = useTranslations();
 
   return (
     <Screen>
-      <Txt variant="title">Settings</Txt>
+      <Txt variant="title">{tr('tab.settings')}</Txt>
 
-      <SectionTitle>Bibles on this device</SectionTitle>
+      <SectionTitle>{tr('settings.language')}</SectionTitle>
+      <Row style={{ flexWrap: 'wrap' }}>
+        <Chip
+          icon="phone-portrait-outline"
+          label={tr('settings.languageAuto')}
+          selected={settings.appLanguage === 'auto'}
+          onPress={() => updateSettings({ appLanguage: 'auto' })}
+        />
+        {LANGUAGES.map((l) => (
+          <Chip key={l.code} label={l.name} selected={settings.appLanguage === l.code} onPress={() => updateSettings({ appLanguage: l.code })} />
+        ))}
+      </Row>
+
+      <SectionTitle>{tr('settings.bibles')}</SectionTitle>
       <Card style={{ gap: 4 }}>
         {(list ?? []).length === 0 && (
           <Txt muted style={{ marginBottom: 8 }}>
-            No Bibles imported yet.
+            {tr('settings.noBibles')}
           </Txt>
         )}
         {(list ?? []).map((x) => (
@@ -75,19 +90,19 @@ export default function SettingsScreen() {
           <ImportButton />
         </View>
         <Txt variant="caption" muted style={{ marginTop: 8 }}>
-          Supports e-Sword Bible files (.bblx). Bibles you import stay on this device and are never uploaded.
+          {tr('settings.bblxHint')}
         </Txt>
       </Card>
 
-      <SectionTitle>Hub (sync & friends)</SectionTitle>
+      <SectionTitle>{tr('settings.hub')}</SectionTitle>
       <HubCard />
 
-      <SectionTitle>Notifications</SectionTitle>
+      <SectionTitle>{tr('settings.notifications')}</SectionTitle>
       {notificationsSupported ? (
         <Card style={{ gap: 14 }}>
           <NotifRow
-            title="Verse of the day"
-            subtitle="A verse from your Bible every morning."
+            title={tr('today.votd')}
+            subtitle={tr('settings.votdHint')}
             enabled={settings.votdEnabled}
             hour={settings.votdHour}
             minute={settings.votdMinute}
@@ -98,8 +113,8 @@ export default function SettingsScreen() {
             onTime={(h, m) => updateSettings({ votdHour: h, votdMinute: m })}
           />
           <NotifRow
-            title="Reading reminder"
-            subtitle="Only if you haven't read yet that day."
+            title={tr('settings.reminder')}
+            subtitle={tr('settings.reminderHint')}
             enabled={settings.reminderEnabled}
             hour={settings.reminderHour}
             minute={settings.reminderMinute}
@@ -112,32 +127,30 @@ export default function SettingsScreen() {
         </Card>
       ) : (
         <Txt muted variant="small">
-          Notifications are available in the Android and iPhone app.
+          {tr('settings.notifWebOnly')}
         </Txt>
       )}
 
-      <SectionTitle>Book names</SectionTitle>
+      <SectionTitle>{tr('settings.bookNames')}</SectionTitle>
       <Row style={{ flexWrap: 'wrap' }}>
-        <Chip label="Match translation" selected={settings.bookNames === 'auto'} onPress={() => updateSettings({ bookNames: 'auto' })} />
-        <Chip label="Español" selected={settings.bookNames === 'es'} onPress={() => updateSettings({ bookNames: 'es' })} />
-        <Chip label="English" selected={settings.bookNames === 'en'} onPress={() => updateSettings({ bookNames: 'en' })} />
+        <Chip label={tr('settings.matchTranslation')} selected={settings.bookNames === 'auto'} onPress={() => updateSettings({ bookNames: 'auto' })} />
+        {LANGUAGES.map((l) => (
+          <Chip key={l.code} label={l.name} selected={settings.bookNames === l.code} onPress={() => updateSettings({ bookNames: l.code })} />
+        ))}
       </Row>
 
-      <SectionTitle>Text size</SectionTitle>
+      <SectionTitle>{tr('read.textSize')}</SectionTitle>
       <Row>
-        <IconButton icon="remove-circle-outline" size={30} label="Smaller" onPress={() => updateSettings({ fontSize: Math.max(13, settings.fontSize - 1) })} />
+        <IconButton icon="remove-circle-outline" size={30} label={tr('read.smaller')} onPress={() => updateSettings({ fontSize: Math.max(13, settings.fontSize - 1) })} />
         <Txt variant="heading">{settings.fontSize}</Txt>
-        <IconButton icon="add-circle-outline" size={30} label="Bigger" onPress={() => updateSettings({ fontSize: Math.min(34, settings.fontSize + 1) })} />
+        <IconButton icon="add-circle-outline" size={30} label={tr('read.bigger')} onPress={() => updateSettings({ fontSize: Math.min(34, settings.fontSize + 1) })} />
       </Row>
 
-      <SectionTitle>About</SectionTitle>
+      <SectionTitle>{tr('settings.about')}</SectionTitle>
       <Card style={{ gap: 6 }}>
-        <Txt variant="label">Lámpara 0.4 · Phase 4</Txt>
+        <Txt variant="label">{tr('settings.version', { v: '0.5' })}</Txt>
         <Txt variant="small" muted>
-          “Lámpara es a mis pies tu palabra, y lumbrera a mi camino.” — Salmo 119:105
-        </Txt>
-        <Txt variant="small" muted>
-          Coming next: the website on your hub and focus lock.
+          {tr('settings.verse')}
         </Txt>
       </Card>
     </Screen>
@@ -147,6 +160,7 @@ export default function SettingsScreen() {
 function HubCard() {
   const db = useSQLiteContext();
   const t = useTheme();
+  const { t: tr, tn, locale } = useT();
   const hub = useHub();
   const info = useLive((d) => getSyncInfo(d), [], ['hub', 'reads', 'highlights', 'notes', 'topics', 'bookmarks', 'plans']);
   const [busy, setBusy] = useState(false);
@@ -156,9 +170,9 @@ function HubCard() {
     return (
       <Card style={{ gap: 8 }}>
         <Txt variant="small" muted>
-          Not connected. Connect to your Lámpara hub to sync your phone, tablet and the website, and to read with friends.
+          {tr('settings.hubNotConnected')}
         </Txt>
-        <Button small icon="cloud-outline" title="Connect to your hub" onPress={() => router.push('/hub')} style={{ alignSelf: 'flex-start' }} />
+        <Button small icon="cloud-outline" title={tr('settings.connect')} onPress={() => router.push('/hub')} style={{ alignSelf: 'flex-start' }} />
       </Card>
     );
 
@@ -169,8 +183,8 @@ function HubCard() {
         {hub.user.email} · {hub.url}
       </Txt>
       <Txt variant="small" muted>
-        {info?.lastSync ? `Last synced ${new Date(info.lastSync).toLocaleString()}` : 'Not synced yet'}
-        {info?.pending ? ` · ${info.pending} changes waiting` : ''}
+        {info?.lastSync ? tr('settings.lastSynced', { date: new Date(info.lastSync).toLocaleString(locale) }) : tr('settings.notSynced')}
+        {info?.pending ? ` · ${tn('settings.pending', info.pending)}` : ''}
       </Txt>
       {err && (
         <Txt variant="small" color={t.danger}>
@@ -181,7 +195,7 @@ function HubCard() {
         <Button
           small
           icon="sync"
-          title="Sync now"
+          title={tr('settings.syncNow')}
           loading={busy}
           onPress={async () => {
             setBusy(true);
@@ -200,9 +214,9 @@ function HubCard() {
           small
           kind="ghost"
           icon="log-out-outline"
-          title="Sign out"
+          title={tr('settings.signOut')}
           onPress={async () => {
-            if (await confirm('Sign out of the hub?', 'Everything stays on this device. Changes made while signed out sync next time you sign in.')) {
+            if (await confirm(tr('settings.signOutTitle'), tr('settings.signOutBody'))) {
               await resetSyncState(db);
               signOut();
             }

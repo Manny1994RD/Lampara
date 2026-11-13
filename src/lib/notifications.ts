@@ -3,6 +3,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { Platform } from 'react-native';
 
 import type { Lang } from '@/data/books';
+import { getT } from '@/i18n';
 import { localDay } from './db';
 import { dayLabel } from './plan-format';
 import { getActivePlanProgress } from './plans';
@@ -31,7 +32,7 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   if (!notificationsSupported) return false;
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(CHANNEL, {
-      name: 'Daily verse & reminders',
+      name: getT().t('notif.channel'),
       // eslint-disable-next-line import/namespace -- re-exported enum the lint resolver can't follow
       importance: Notifications.AndroidImportance.DEFAULT,
     });
@@ -66,7 +67,7 @@ export async function rescheduleNotifications(
   if (!perm.granted) return;
 
   const now = new Date();
-  const es = lang === 'es';
+  const { t } = getT();
 
   if (settings.votdEnabled) {
     for (let i = 0; i < VOTD_DAYS_AHEAD; i++) {
@@ -77,8 +78,8 @@ export async function rescheduleNotifications(
       const v = await getVotd(db, tr, lang, day);
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: `${es ? 'Versículo del día' : 'Verse of the day'} · ${v.label}`,
-          body: v.text ? (v.text.length > 220 ? `${v.text.slice(0, 217)}…` : v.text) : es ? 'Abre Lámpara para leerlo.' : 'Open Lámpara to read it.',
+          title: t('notif.votdTitle', { ref: v.label }),
+          body: v.text ? (v.text.length > 220 ? `${v.text.slice(0, 217)}…` : v.text) : t('notif.openToRead'),
           data: { url: '/read', book: v.book, ch: v.ch },
         },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: when, channelId: CHANNEL },
@@ -93,11 +94,7 @@ export async function rescheduleNotifications(
     );
     const plans = await getActivePlanProgress(db);
     const next = plans[0]?.nextDay;
-    const body = next
-      ? `${es ? 'Hoy toca' : 'Up next'}: ${dayLabel(next, lang)}`
-      : es
-        ? 'Tómate unos minutos con la Palabra hoy.'
-        : 'Take a few minutes with the Word today.';
+    const body = next ? t('notif.upNext', { label: dayLabel(next, lang) }) : t('notif.reminderBody');
     for (let i = 0; i < REMINDER_DAYS_AHEAD; i++) {
       if (i === 0 && (readToday?.c ?? 0) > 0) continue; // already read today
       const day = new Date(now);
@@ -106,7 +103,7 @@ export async function rescheduleNotifications(
       if (when <= now) continue;
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: es ? '¿Ya leíste hoy? 📖' : 'Time to read 📖',
+          title: t('notif.reminderTitle'),
           body,
           data: { url: '/' },
         },

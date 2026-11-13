@@ -7,13 +7,14 @@ import { BOOKS, TOTAL_CHAPTERS, bookName } from '@/data/books';
 import { useLive } from '@/hooks/use-live';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
+import { useT } from '@/i18n';
 import { getAllReadCounts } from '@/lib/data';
 import { updateSettings } from '@/lib/settings';
 
 export default function ProgressScreen() {
   const t = useTheme();
   const { lang } = useTranslations();
-  const es = lang === 'es';
+  const { t: tr, tn } = useT();
   const counts = useLive((db) => getAllReadCounts(db), [], ['reads']);
   const [testament, setTestament] = useState<'all' | 'OT' | 'NT'>('all');
   const [open, setOpen] = useState<number | null>(null);
@@ -35,14 +36,14 @@ export default function ProgressScreen() {
 
   return (
     <Screen>
-      <Txt variant="title">{es ? 'Progreso' : 'Progress'}</Txt>
+      <Txt variant="title">{tr('tab.progress')}</Txt>
       <Txt muted style={{ marginBottom: 14 }}>
-        {total} / {TOTAL_CHAPTERS} {es ? 'capítulos leídos al menos una vez' : 'chapters read at least once'}
+        {tr('progress.readOnce', { done: total, total: TOTAL_CHAPTERS })}
       </Txt>
       <Row style={{ marginBottom: 14, flexWrap: 'wrap' }}>
-        <Chip label={es ? 'Todo' : 'All'} selected={testament === 'all'} onPress={() => setTestament('all')} />
-        <Chip label={es ? 'Antiguo T.' : 'Old Testament'} selected={testament === 'OT'} onPress={() => setTestament('OT')} />
-        <Chip label={es ? 'Nuevo T.' : 'New Testament'} selected={testament === 'NT'} onPress={() => setTestament('NT')} />
+        <Chip label={tr('common.all')} selected={testament === 'all'} onPress={() => setTestament('all')} />
+        <Chip label={tr('common.oldTestament')} selected={testament === 'OT'} onPress={() => setTestament('OT')} />
+        <Chip label={tr('common.newTestament')} selected={testament === 'NT'} onPress={() => setTestament('NT')} />
       </Row>
 
       <View style={{ gap: 8 }}>
@@ -64,7 +65,7 @@ export default function ProgressScreen() {
                   </Txt>
                   <Txt variant="small" muted>
                     {done}/{b.chapters}
-                    {reads > done ? ` · ${reads} ${es ? 'lecturas' : 'reads'}` : ''}
+                    {reads > done ? ` · ${tn('progress.reads', reads)}` : ''}
                   </Txt>
                 </Row>
                 <View style={{ marginTop: 8 }}>

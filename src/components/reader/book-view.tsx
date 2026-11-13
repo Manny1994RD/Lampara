@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 
 import { Fonts } from '@/constants/theme';
+import { getT } from '@/i18n';
 import type { Verse } from '@/lib/data';
 
 export type BookColors = {
@@ -300,17 +301,17 @@ export function BookView(props: Props) {
           <View style={styles.bookShadow}>{body}</View>
         </View>
         {/* Tap the outer edges to turn. */}
-        <Pressable accessibilityLabel="Previous page" onPress={() => turn(-1)} style={[styles.edge, { left: 0 }]} />
-        <Pressable accessibilityLabel="Next page" onPress={() => turn(1)} style={[styles.edge, { right: 0 }]} />
+        <Pressable accessibilityLabel={getT().t('read.prevPage')} onPress={() => turn(-1)} style={[styles.edge, { left: 0 }]} />
+        <Pressable accessibilityLabel={getT().t('read.nextPage')} onPress={() => turn(1)} style={[styles.edge, { right: 0 }]} />
       </View>
       <View style={styles.bar}>
-        <Pressable onPress={() => turn(-1)} hitSlop={10} style={styles.arrow} accessibilityLabel="Previous page">
+        <Pressable onPress={() => turn(-1)} hitSlop={10} style={styles.arrow} accessibilityLabel={getT().t('read.prevPage')}>
           <Text style={[styles.arrowText, { color: colors.accent }]}>‹</Text>
         </Pressable>
         <Text style={{ color: colors.muted, fontSize: 13, minWidth: 70, textAlign: 'center' }}>
           {ready ? (firstPage === lastPage ? `${firstPage} / ${pageList.length}` : `${firstPage}–${lastPage} / ${pageList.length}`) : '…'}
         </Text>
-        <Pressable onPress={() => turn(1)} hitSlop={10} style={styles.arrow} accessibilityLabel="Next page">
+        <Pressable onPress={() => turn(1)} hitSlop={10} style={styles.arrow} accessibilityLabel={getT().t('read.nextPage')}>
           <Text style={[styles.arrowText, { color: colors.accent }]}>›</Text>
         </Pressable>
         <View style={{ flex: 1 }} />

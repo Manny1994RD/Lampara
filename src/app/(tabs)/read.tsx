@@ -36,10 +36,11 @@ import {
 } from '@/components/ui';
 import { PAPERS, PAPER_KEYS } from '@/constants/paper';
 import { Fonts, ReaderMaxWidth } from '@/constants/theme';
-import { bookName, getBook } from '@/data/books';
+import { bookName, getBook, refLabel } from '@/data/books';
 import { useLive } from '@/hooks/use-live';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
+import { useT, type TKey } from '@/i18n';
 import {
   getChapter,
   getChapterBookmarks,
@@ -64,7 +65,7 @@ export default function ReadScreen() {
   const tablet = useIsTablet();
   const settings = useSettings();
   const { list, current, lang } = useTranslations();
-  const es = lang === 'es';
+  const { t: L, tn, date } = useT();
   const { book, chapter } = settings;
   const tr = current?.id ?? null;
 
@@ -165,7 +166,7 @@ export default function ReadScreen() {
   const pc = paper
     ? { text: paper.text, accent: paper.accent, dark: paper.dark, muted: paper.muted, base: paper.base, shade: paper.shade, texture: paper.texture }
     : { text: t.text, accent: t.accent, dark: t.dark, muted: t.textSecondary, base: t.card, shade: 'rgba(0,0,0,0.15)', texture: null };
-  const missingText = es ? `${current?.abbr} no incluye este capítulo.` : `${current?.abbr} doesn't include this chapter.`;
+  const missingText = L('read.missing', { abbr: current?.abbr ?? '' });
 
   const renderVerse = (v: Verse, leadingSpace: boolean) => (
     <VerseText
@@ -206,8 +207,8 @@ export default function ReadScreen() {
             </Txt>
           </Pressable>
           <View style={{ flex: 1 }} />
-          <IconButton icon="search" label="Search" onPress={() => router.push('/search')} />
-          <IconButton icon={bookMode ? 'book-outline' : 'text'} label="Display" onPress={() => setFontSheet(true)} />
+          <IconButton icon="search" label={L('read.search')} onPress={() => router.push('/search')} />
+          <IconButton icon={bookMode ? 'book-outline' : 'text'} label={L('read.display')} onPress={() => setFontSheet(true)} />
         </View>
       </View>
 
@@ -235,12 +236,12 @@ export default function ReadScreen() {
                 {!!readInfo?.count && planNext && !(planNext.book === book && planNext.ch === chapter) && (
                   <Button small kind="ghost" icon="arrow-forward" title={`${bookName(planNext.book, lang)} ${planNext.ch}`} onPress={() => go(planNext.book, planNext.ch)} />
                 )}
-                {!!readInfo?.count && <IconButton icon="arrow-undo" size={18} label="Undo last read" color={pc.muted} onPress={() => undoLastRead(db, book, chapter)} />}
+                {!!readInfo?.count && <IconButton icon="arrow-undo" size={18} label={L('read.undo')} color={pc.muted} onPress={() => undoLastRead(db, book, chapter)} />}
                 <Button
                   small
                   kind={readInfo?.count ? 'secondary' : 'primary'}
                   icon="checkmark-done"
-                  title={readInfo?.count ? (es ? `Leído ×${readInfo.count}` : `Read ×${readInfo.count}`) : es ? 'Marcar leído' : 'Mark read'}
+                  title={readInfo?.count ? L('read.readShort', { n: readInfo.count }) : L('read.markShort')}
                   onPress={markRead}
                 />
               </Row>
@@ -273,35 +274,24 @@ export default function ReadScreen() {
               <Row style={{ justifyContent: 'space-between' }}>
                 <View style={{ flex: 1 }}>
                   <Txt variant="label">
-                    {readInfo?.count
-                      ? es
-                        ? `Leído ${readInfo.count} ${readInfo.count === 1 ? 'vez' : 'veces'}`
-                        : `Read ${readInfo.count} ${readInfo.count === 1 ? 'time' : 'times'}`
-                      : es
-                        ? 'Aún no lo has marcado'
-                        : 'Not marked as read yet'}
+                    {readInfo?.count ? tn('read.readTimes', readInfo.count) : L('read.notMarked')}
                   </Txt>
                   {readInfo?.last && (
                     <Txt variant="small" muted>
-                      {es ? 'Última vez: ' : 'Last: '}
-                      {new Date(readInfo.last).toLocaleDateString()}
+                      {L('read.last', { date: date(readInfo.last) })}
                     </Txt>
                   )}
                 </View>
                 {!!readInfo?.count && (
-                  <IconButton icon="arrow-undo" label="Undo last read" onPress={() => undoLastRead(db, book, chapter)} />
+                  <IconButton icon="arrow-undo" label={L('read.undo')} onPress={() => undoLastRead(db, book, chapter)} />
                 )}
               </Row>
               <Button
                 icon="checkmark-done"
                 title={
                   readInfo?.count
-                    ? es
-                      ? 'Lo leí otra vez'
-                      : 'I read it again'
-                    : es
-                      ? 'Marcar capítulo como leído'
-                      : 'Mark chapter as read'
+                    ? L('read.readAgain')
+                    : L('read.markRead')
                 }
                 onPress={async () => {
                   await markChapterRead(db, book, chapter, tr);
@@ -311,7 +301,7 @@ export default function ReadScreen() {
                 <Button
                   kind="secondary"
                   icon="arrow-forward"
-                  title={`${es ? 'Siguiente en tu plan' : 'Next in your plan'}: ${bookName(planNext.book, lang)} ${planNext.ch}`}
+                  title={L('read.nextInPlan', { ref: refLabel(planNext.book, planNext.ch, undefined, lang) })}
                   onPress={() => go(planNext.book, planNext.ch)}
                 />
               )}
@@ -319,8 +309,8 @@ export default function ReadScreen() {
           )}
 
           <Row style={{ justifyContent: 'space-between', marginTop: 18 }}>
-            <Button kind="ghost" icon="chevron-back" title={es ? 'Anterior' : 'Previous'} onPress={prev} disabled={book === 1 && chapter === 1} />
-            <Button kind="ghost" title={es ? 'Siguiente' : 'Next'} onPress={next} disabled={book === 66 && chapter === 22} />
+            <Button kind="ghost" icon="chevron-back" title={L('read.previous')} onPress={prev} disabled={book === 1 && chapter === 1} />
+            <Button kind="ghost" title={L('read.next')} onPress={next} disabled={book === 66 && chapter === 22} />
           </Row>
         </View>
       </ScrollView>
@@ -333,7 +323,7 @@ export default function ReadScreen() {
           <View style={{ width: '100%', maxWidth: ReaderMaxWidth, alignSelf: 'center', gap: 12 }}>
             <Row style={{ justifyContent: 'space-between' }}>
               <Txt variant="label">{selLabel}</Txt>
-              <IconButton icon="close" label="Clear selection" onPress={() => setSelected([])} />
+              <IconButton icon="close" label={L('read.clearSelection')} onPress={() => setSelected([])} />
             </Row>
             <ColorSwatches
               allowNone
@@ -345,26 +335,26 @@ export default function ReadScreen() {
             />
             <Row style={{ flexWrap: 'wrap' }} gap={6}>
               {selected.length === 1 && tr && (
-                <Button small kind="secondary" icon="color-wand" title={es ? 'Palabras' : 'Words'} onPress={() => setWordVerse(verses?.find((v) => v.v === selected[0]) ?? null)} />
+                <Button small kind="secondary" icon="color-wand" title={L('read.words')} onPress={() => setWordVerse(verses?.find((v) => v.v === selected[0]) ?? null)} />
               )}
               {selected.length === 1 && (
                 <Button
                   small
                   kind="secondary"
                   icon={bookmarks?.has(selected[0]) ? 'bookmark' : 'bookmark-outline'}
-                  title={es ? 'Marcador' : 'Bookmark'}
+                  title={L('read.bookmark')}
                   onPress={() => toggleBookmark(db, selRefs[0])}
                 />
               )}
               {selected.length === 1 && (
-                <Button small kind="secondary" icon="create-outline" title={es ? 'Nota' : 'Note'} onPress={() => setNoteRef(selRefs[0])} />
+                <Button small kind="secondary" icon="create-outline" title={L('read.note')} onPress={() => setNoteRef(selRefs[0])} />
               )}
-              <Button small kind="secondary" icon="pricetags-outline" title={es ? 'Tema' : 'Topic'} onPress={() => setTopicRefs(selRefs)} />
+              <Button small kind="secondary" icon="pricetags-outline" title={L('read.topic')} onPress={() => setTopicRefs(selRefs)} />
               <Button
                 small
                 kind="secondary"
                 icon="share-outline"
-                title={es ? 'Compartir' : 'Share'}
+                title={L('common.share')}
                 onPress={() => {
                   const message = `${selectedText()}\n— ${selLabel} (${current?.abbr})`;
                   if (Platform.OS === 'web' && !navigator.share) navigator.clipboard?.writeText(message);
@@ -378,7 +368,7 @@ export default function ReadScreen() {
 
       <ChapterPicker visible={picker} onClose={() => setPicker(false)} lang={lang} book={book} onPick={go} />
 
-      <Sheet visible={trPicker} onClose={() => setTrPicker(false)} title={es ? 'Traducción' : 'Translation'}>
+      <Sheet visible={trPicker} onClose={() => setTrPicker(false)} title={L('read.translation')}>
         {(list ?? []).map((x) => (
           <Pressable
             key={x.id}
@@ -397,24 +387,24 @@ export default function ReadScreen() {
           </Pressable>
         ))}
         <View style={{ marginTop: 16 }}>
-          <ImportButton label={es ? 'Importar otra Biblia' : 'Import another Bible'} />
+          <ImportButton label={L('import.another')} />
         </View>
       </Sheet>
 
-      <Sheet visible={fontSheet} onClose={() => setFontSheet(false)} title={es ? 'Pantalla' : 'Display'}>
+      <Sheet visible={fontSheet} onClose={() => setFontSheet(false)} title={L('read.display')}>
         <Txt variant="label" style={{ marginBottom: 8 }}>
-          {es ? 'Estilo de lectura' : 'Reading style'}
+          {L('read.style')}
         </Txt>
         <Row style={{ flexWrap: 'wrap' }}>
-          <Chip icon="reorder-four-outline" label={es ? 'Desplazar' : 'Scroll'} selected={!bookMode} onPress={() => updateSettings({ readerMode: 'scroll' })} />
-          <Chip icon="book-outline" label={es ? 'Libro (pasar páginas)' : 'Book (turn pages)'} selected={bookMode} onPress={() => updateSettings({ readerMode: 'book' })} />
+          <Chip icon="reorder-four-outline" label={L('read.scroll')} selected={!bookMode} onPress={() => updateSettings({ readerMode: 'scroll' })} />
+          <Chip icon="book-outline" label={L('read.book')} selected={bookMode} onPress={() => updateSettings({ readerMode: 'book' })} />
         </Row>
         {bookMode && (
           <Row style={{ justifyContent: 'space-between', marginTop: 12 }}>
             <View style={{ flex: 1 }}>
-              <Txt variant="label">{es ? 'Dos páginas' : 'Two-page spread'}</Txt>
+              <Txt variant="label">{L('read.twoPages')}</Txt>
               <Txt variant="small" muted>
-                {es ? 'En pantallas anchas (tableta horizontal).' : 'On wide screens (tablet in landscape).'}
+                {L('read.twoPagesHint')}
               </Txt>
             </View>
             <Switch value={settings.twoPages} onValueChange={(v) => updateSettings({ twoPages: v })} />
@@ -422,14 +412,14 @@ export default function ReadScreen() {
         )}
 
         <Txt variant="label" style={{ marginTop: 18, marginBottom: 8 }}>
-          {es ? 'Papel' : 'Paper'}
+          {L('read.paper')}
         </Txt>
         <View style={styles.paperGrid}>
-          <PaperSwatch label={es ? 'Ninguno' : 'None'} selected={settings.paper === 'none'} base={t.background} text={t.text} onPress={() => updateSettings({ paper: 'none' })} />
+          <PaperSwatch label={L('paper.none')} selected={settings.paper === 'none'} base={t.background} text={t.text} onPress={() => updateSettings({ paper: 'none' })} />
           {PAPER_KEYS.map((k) => (
             <PaperSwatch
               key={k}
-              label={es ? PAPERS[k].es : PAPERS[k].en}
+              label={L(`paper.${k}` as TKey)}
               selected={settings.paper === k}
               base={PAPERS[k].base}
               text={PAPERS[k].text}
@@ -440,16 +430,16 @@ export default function ReadScreen() {
         </View>
 
         <Txt variant="label" style={{ marginTop: 18 }}>
-          {es ? 'Tamaño del texto' : 'Text size'}
+          {L('read.textSize')}
         </Txt>
         <Row style={{ justifyContent: 'center', gap: 24 }}>
-          <IconButton icon="remove-circle-outline" size={34} label="Smaller" onPress={() => updateSettings({ fontSize: Math.max(13, fontSize - 1) })} />
+          <IconButton icon="remove-circle-outline" size={34} label={L('read.smaller')} onPress={() => updateSettings({ fontSize: Math.max(13, fontSize - 1) })} />
           <Txt variant="title">{fontSize}</Txt>
-          <IconButton icon="add-circle-outline" size={34} label="Bigger" onPress={() => updateSettings({ fontSize: Math.min(34, fontSize + 1) })} />
+          <IconButton icon="add-circle-outline" size={34} label={L('read.bigger')} onPress={() => updateSettings({ fontSize: Math.min(34, fontSize + 1) })} />
         </Row>
         <PaperBackground texture={pc.texture} base={paper ? pc.base : t.cardAlt} style={{ borderRadius: 12, padding: 14, marginTop: 8 }}>
           <Text style={{ fontFamily: Fonts.serif, fontSize, lineHeight: fontSize * 1.6, color: pc.text }}>
-            {es ? 'Lámpara es a mis pies tu palabra.' : 'Your word is a lamp to my feet.'}
+            {L('read.sample')}
           </Text>
         </PaperBackground>
       </Sheet>

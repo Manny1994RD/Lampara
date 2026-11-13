@@ -7,10 +7,11 @@ import { Button, Card, IconButton, ProgressBar, Row, Screen, SectionTitle, Txt }
 import { bookName } from '@/data/books';
 import { useRemote } from '@/hooks/use-remote';
 import { useTheme } from '@/hooks/use-theme';
+import { getT, useT } from '@/i18n';
 import { useTranslations } from '@/hooks/use-translation';
 import { localDay } from '@/lib/db';
 import { useHub } from '@/lib/hub';
-import { challengeTarget, cheer, deleteChallenge, getChallenge, leaveChallenge, updateChallengeProgress } from '@/lib/social';
+import { activityText, challengeTarget, cheer, deleteChallenge, getChallenge, leaveChallenge, updateChallengeProgress } from '@/lib/social';
 import { syncNow } from '@/lib/sync';
 
 const CHEERS = ['🔥', '👏', '🙏', '💪', '❤️'];
@@ -19,24 +20,26 @@ function confirm(title: string, msg: string): Promise<boolean> {
   if (Platform.OS === 'web') return Promise.resolve(window.confirm(`${title}\n\n${msg}`));
   return new Promise((r) =>
     Alert.alert(title, msg, [
-      { text: 'Cancel', style: 'cancel', onPress: () => r(false) },
-      { text: 'OK', style: 'destructive', onPress: () => r(true) },
+      { text: getT().t('common.cancel'), style: 'cancel', onPress: () => r(false) },
+      { text: getT().t('common.ok'), style: 'destructive', onPress: () => r(true) },
     ])
   );
 }
 
 function ago(iso: string) {
+  const { t } = getT();
   const s = (Date.now() - new Date(iso.replace(' ', 'T')).getTime()) / 1000;
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
+  if (s < 60) return t('time.now');
+  if (s < 3600) return t('time.m', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('time.h', { n: Math.floor(s / 3600) });
+  return t('time.d', { n: Math.floor(s / 86400) });
 }
 
 export default function ChallengeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const t = useTheme();
+  const { t: tr, date } = useT();
   const hub = useHub();
   const { lang } = useTranslations();
   const { data, error } = useRemote(() => getChallenge(id), [id]);
@@ -48,7 +51,7 @@ export default function ChallengeScreen() {
   if (error && !data)
     return (
       <Screen>
-        <IconButton icon="chevron-back" label="Back" onPress={back} />
+        <IconButton icon="chevron-back" label={tr('common.back')} onPress={back} />
         <Txt color={t.danger}>{error}</Txt>
       </Screen>
     );
@@ -64,7 +67,7 @@ export default function ChallengeScreen() {
   const duePct = Math.max(0, elapsed - 1) / totalDays;
   const me = members.find((m) => m.user === hub.user.id);
   const isOwner = c.owner === hub.user.id;
-  const unit = c.goal === 'days' ? 'days' : 'chapters';
+  const unit = c.goal === 'days' ? tr('challenge.unit.days') : tr('challenge.unit.chapters');
   const ended = c.end_day < today;
 
   const refresh = async () => {
@@ -80,11 +83,11 @@ export default function ChallengeScreen() {
   return (
     <Screen maxWidth={720}>
       <Row>
-        <IconButton icon="chevron-back" label="Back" onPress={back} />
+        <IconButton icon="chevron-back" label={tr('common.back')} onPress={back} />
         <Txt variant="title" style={{ flex: 1 }} numberOfLines={2}>
           {c.title}
         </Txt>
-        <IconButton icon="refresh" label="Refresh" onPress={refresh} active={refreshing} />
+        <IconButton icon="refresh" label={tr('challenge.refresh')} onPress={refresh} active={refreshing} />
       </Row>
       {!!c.message && (
         <Txt muted style={{ marginBottom: 6 }}>
@@ -95,10 +98,10 @@ export default function ChallengeScreen() {
       <Card style={{ gap: 8, marginTop: 6 }}>
         <Row style={{ justifyContent: 'space-between' }}>
           <Txt variant="label">
-            Goal: {target} {unit}
+            {tr('challenge.goalLine', { n: target, unit })}
           </Txt>
           <Txt variant="small" muted>
-            {ended ? 'Finished' : today < c.start_day ? `Starts ${c.start_day}` : `Day ${elapsed} of ${totalDays}`}
+            {ended ? tr('challenge.finished') : today < c.start_day ? tr('challenge.startsOn', { date: date(c.start_day) }) : tr('challenge.dayOf', { day: elapsed, total: totalDays })}
           </Txt>
         </Row>
         {c.goal === 'books' && (
@@ -108,17 +111,17 @@ export default function ChallengeScreen() {
         )}
         <ProgressBar value={elapsed / totalDays} height={6} color={t.textSecondary} />
         <Txt variant="caption" muted>
-          {`${c.start_day} → ${c.end_day} · on pace = ${Math.ceil(expectedPct * target)} ${unit} by the end of today`}
+          {tr('challenge.pace', { start: date(c.start_day, { month: 'short', day: 'numeric' }), end: date(c.end_day, { month: 'short', day: 'numeric' }), n: Math.ceil(expectedPct * target), unit })}
         </Txt>
       </Card>
 
-      <SectionTitle>Leaderboard</SectionTitle>
+      <SectionTitle>{tr('challenge.leaderboard')}</SectionTitle>
       <View style={{ gap: 10 }}>
         {members.map((m, i) => {
           const pct = m.progress / target;
           const behind = !m.done && !ended && pct + 0.0001 < duePct;
           const isMe = m.user === hub.user.id;
-          const name = isMe ? 'You' : (m.expand?.user?.name ?? 'Friend');
+          const name = isMe ? tr('challenge.you') : (m.expand?.user?.name ?? tr('challenge.friend'));
           return (
             <Card key={m.id} style={[{ gap: 8 }, isMe && { borderColor: t.accent, borderWidth: 1.5 }]}>
               <Row style={{ justifyContent: 'space-between' }}>
@@ -131,16 +134,16 @@ export default function ChallengeScreen() {
                 </Row>
                 <Txt variant="small" muted>
                   {m.progress}/{target}
-                  {behind ? ' · behind pace' : ''}
+                  {behind ? ` · ${tr('challenge.behind')}` : ''}
                 </Txt>
               </Row>
               <ProgressBar value={pct} height={10} color={m.done ? t.success : t.accent} />
               {!isMe && !ended && (
                 <>
                   <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                    <Button small kind="secondary" icon="heart-outline" title="Cheer" onPress={() => setCheerFor(cheerFor === m.user ? null : m.user)} />
+                    <Button small kind="secondary" icon="heart-outline" title={tr('challenge.cheer')} onPress={() => setCheerFor(cheerFor === m.user ? null : m.user)} />
                     {behind && (
-                      <Button small kind="ghost" icon="notifications-outline" title="Nudge" onPress={() => m.expand?.user && cheer(c.id, m.expand.user, '👋', 'nudge')} />
+                      <Button small kind="ghost" icon="notifications-outline" title={tr('challenge.nudge')} onPress={() => m.expand?.user && cheer(c.id, m.expand.user, '👋', 'nudge')} />
                     )}
                   </Row>
                   {cheerFor === m.user && (
@@ -148,7 +151,7 @@ export default function ChallengeScreen() {
                       {CHEERS.map((e) => (
                         <Pressable
                           key={e}
-                          accessibilityLabel={`Send ${e}`}
+                          accessibilityLabel={tr('challenge.send', { emoji: e })}
                           onPress={async () => {
                             if (m.expand?.user) await cheer(c.id, m.expand.user, e);
                             setCheerFor(null);
@@ -166,15 +169,14 @@ export default function ChallengeScreen() {
         })}
       </View>
       <Txt variant="caption" muted style={{ marginTop: 8 }}>
-        Progress counts the chapters you mark as read in Lámpara between the start and end dates. It updates when your
-        devices sync.
+        {tr('challenge.progressNote')}
       </Txt>
 
-      <SectionTitle>Activity</SectionTitle>
+      <SectionTitle>{tr('challenge.activity')}</SectionTitle>
       <Card style={{ gap: 2 }}>
         {activity.length === 0 && (
           <Txt variant="small" muted>
-            Nothing yet.
+            {tr('challenge.nothing')}
           </Txt>
         )}
         {activity.map((a) => {
@@ -185,7 +187,7 @@ export default function ChallengeScreen() {
                 {a.emoji || (a.kind === 'completed' ? '🏁' : a.kind === 'joined' ? '👋' : a.kind === 'progress' ? '📖' : '✨')}
               </Txt>
               <Txt variant="small" style={{ flex: 1 }} color={forMe ? t.accent : undefined}>
-                {a.text}
+                {activityText(a, tr, hub.user.id)}
               </Txt>
               <Txt variant="caption" muted>
                 {ago(a.created)}
@@ -201,9 +203,9 @@ export default function ChallengeScreen() {
             kind="danger"
             small
             icon="exit-outline"
-            title="Leave challenge"
+            title={tr('challenge.leave')}
             onPress={async () => {
-              if (await confirm('Leave this challenge?', 'Your reading history is not affected.')) {
+              if (await confirm(tr('challenge.leaveTitle'), tr('challenge.leaveBody'))) {
                 await leaveChallenge(me.id);
                 back();
               }
@@ -215,9 +217,9 @@ export default function ChallengeScreen() {
             kind="danger"
             small
             icon="trash-outline"
-            title="Delete challenge"
+            title={tr('challenge.delete')}
             onPress={async () => {
-              if (await confirm('Delete this challenge?', 'It is removed for everyone in it.')) {
+              if (await confirm(tr('challenge.deleteTitle'), tr('challenge.deleteBody'))) {
                 await deleteChallenge(c.id);
                 back();
               }

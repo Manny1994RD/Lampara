@@ -7,6 +7,7 @@ import { bookName } from '@/data/books';
 import { useLive } from '@/hooks/use-live';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
+import { useT } from '@/i18n';
 import { dayLabel, openChapter } from '@/lib/plan-format';
 import { deletePlan, getPlanProgress, getPlans, setPlanStatus } from '@/lib/plans';
 
@@ -15,7 +16,7 @@ export default function PlanScreen() {
   const db = useSQLiteContext();
   const t = useTheme();
   const { lang } = useTranslations();
-  const es = lang === 'es';
+  const { t: tr, tn, date } = useT();
   const prog = useLive(
     async (d) => {
       const p = (await getPlans(d)).find((x) => x.id === id);
@@ -28,14 +29,14 @@ export default function PlanScreen() {
   const back = () => (router.canGoBack() ? router.back() : router.navigate('/plans'));
 
   const remove = async () => {
-    const msg = es ? 'Tu historial de lectura no se borra.' : 'Your reading history is kept.';
+    const msg = tr('plan.deleteBody');
     const ok =
       Platform.OS === 'web'
         ? window.confirm(msg)
         : await new Promise<boolean>((r) =>
-            Alert.alert(es ? '¿Borrar plan?' : 'Delete plan?', msg, [
-              { text: 'Cancel', style: 'cancel', onPress: () => r(false) },
-              { text: 'Delete', style: 'destructive', onPress: () => r(true) },
+            Alert.alert(tr('plan.deleteTitle'), msg, [
+              { text: tr('common.cancel'), style: 'cancel', onPress: () => r(false) },
+              { text: tr('common.delete'), style: 'destructive', onPress: () => r(true) },
             ])
           );
     if (ok) {
@@ -47,8 +48,8 @@ export default function PlanScreen() {
   if (prog === null) {
     return (
       <Screen>
-        <IconButton icon="chevron-back" label="Back" onPress={back} />
-        <Txt muted>{es ? 'Plan no encontrado.' : 'Plan not found.'}</Txt>
+        <IconButton icon="chevron-back" label={tr('common.back')} onPress={back} />
+        <Txt muted>{tr('plan.notFound')}</Txt>
       </Screen>
     );
   }
@@ -61,17 +62,17 @@ export default function PlanScreen() {
   return (
     <Screen>
       <Row>
-        <IconButton icon="chevron-back" label="Back" onPress={back} />
+        <IconButton icon="chevron-back" label={tr('common.back')} onPress={back} />
         <Txt variant="title" style={{ flex: 1 }} numberOfLines={2}>
           {plan.name}
         </Txt>
-        <IconButton icon="trash-outline" label="Delete plan" color={t.danger} onPress={remove} />
+        <IconButton icon="trash-outline" label={tr('common.delete')} color={t.danger} onPress={remove} />
       </Row>
 
       <Card style={{ gap: 8, marginTop: 8 }}>
         <Row style={{ justifyContent: 'space-between' }}>
           <Txt variant="label">
-            {prog.doneChapters}/{prog.totalChapters} {es ? 'capítulos' : 'chapters'}
+            {prog.doneChapters}/{prog.totalChapters} {tr('challenge.unit.chapters')}
           </Txt>
           <Txt variant="label" color={t.accent}>
             {Math.round((prog.doneChapters / prog.totalChapters) * 100)}%
@@ -80,28 +81,18 @@ export default function PlanScreen() {
         <ProgressBar value={prog.doneChapters / prog.totalChapters} height={10} />
         <Txt variant="small" muted>
           {todayIndex < 0
-            ? es
-              ? `Empieza el ${plan.start_day}`
-              : `Starts ${plan.start_day}`
-            : `${es ? 'Día' : 'Day'} ${Math.min(plan.days, todayIndex + 1)} ${es ? 'de' : 'of'} ${plan.days} · ` +
-              (prog.behind > 0
-                ? es
-                  ? `${prog.behind} capítulos atrasado`
-                  : `${prog.behind} chapters behind`
-                : es
-                  ? 'al día'
-                  : 'on track')}
+            ? tr('plan.startsOn', { date: date(plan.start_day) })
+            : `${tr('plan.dayOf', { day: Math.min(plan.days, todayIndex + 1), total: plan.days })} · ` +
+              (prog.behind > 0 ? tn('today.behind', prog.behind) : tr('today.onTrack'))}
         </Txt>
         {plan.status === 'active' && prog.behind > 0 && (
           <Txt variant="small" muted>
-            {es
-              ? 'No te preocupes: sigue con el próximo día pendiente, a tu ritmo.'
-              : 'No worries — just continue with the next unfinished day at your own pace.'}
+            {tr('plan.noWorries')}
           </Txt>
         )}
         {prog.nextDay && plan.status === 'active' && (
           <Button
-            title={`${es ? 'Leer' : 'Read'} ${dayLabel(prog.nextDay, lang)}`}
+            title={tr('plan.read', { label: dayLabel(prog.nextDay, lang) })}
             icon="book"
             onPress={() => {
               const c = prog.nextDay!.chapters.find((x) => !x.done)!;
@@ -109,13 +100,13 @@ export default function PlanScreen() {
             }}
           />
         )}
-        {plan.status === 'archived' && <Button kind="secondary" title={es ? 'Reanudar' : 'Resume'} onPress={() => setPlanStatus(db, plan.id, 'active')} />}
+        {plan.status === 'archived' && <Button kind="secondary" title={tr('plan.resume')} onPress={() => setPlanStatus(db, plan.id, 'active')} />}
       </Card>
 
       <View style={{ gap: 8, marginTop: 16 }}>
         {firstShown > 0 && (
           <Txt variant="small" muted>
-            {es ? `${firstShown} días anteriores completados u ocultos` : `${firstShown} earlier days hidden`}
+            {tr('plan.hiddenDays', { n: firstShown })}
           </Txt>
         )}
         {schedule.slice(firstShown).map((day) => {
@@ -124,8 +115,8 @@ export default function PlanScreen() {
             <Card key={day.index} style={[{ paddingVertical: 12, gap: 6 }, isToday && { borderColor: t.accent, borderWidth: 2 }]}>
               <Row style={{ justifyContent: 'space-between' }}>
                 <Txt variant="caption" muted style={{ fontWeight: '700' }}>
-                  {es ? 'DÍA' : 'DAY'} {day.index + 1} · {new Date(`${day.date}T12:00:00`).toLocaleDateString(es ? 'es' : 'en', { weekday: 'short', month: 'short', day: 'numeric' })}
-                  {isToday ? (es ? ' · HOY' : ' · TODAY') : ''}
+                  {tr('plan.day', { n: day.index + 1 })} · {date(day.date, { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {isToday ? ` · ${tr('plan.todayTag')}` : ''}
                 </Txt>
                 {day.done && <Ionicons name="checkmark-circle" size={20} color={t.success} />}
               </Row>

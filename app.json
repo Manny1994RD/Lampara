@@ -51,7 +51,9 @@
           "color": "#B8741A",
           "defaultChannel": "daily"
         }
-      ]
+      ],
+      "expo-sharing",
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,

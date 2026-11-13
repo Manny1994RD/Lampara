@@ -9,6 +9,7 @@ import { HIGHLIGHT_KEYS, type HighlightColor } from '@/constants/theme';
 import { useLive } from '@/hooks/use-live';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
+import { useT } from '@/i18n';
 import {
   createTopic,
   deleteHighlight,
@@ -27,7 +28,7 @@ export default function LibraryScreen() {
   const db = useSQLiteContext();
   const t = useTheme();
   const { current, lang } = useTranslations();
-  const es = lang === 'es';
+  const { t: L, tn } = useT();
   const tr = current?.id ?? null;
   const [tab, setTab] = useState<Tab>('highlights');
   const [colorFilter, setColorFilter] = useState<HighlightColor | null>(null);
@@ -70,17 +71,17 @@ export default function LibraryScreen() {
   const topics = useLive((d) => getTopics(d), [], ['topics']);
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: 'highlights', label: es ? 'Resaltados' : 'Highlights', count: highlights?.length },
-    { key: 'bookmarks', label: es ? 'Marcadores' : 'Bookmarks', count: bookmarks?.length },
-    { key: 'notes', label: es ? 'Notas' : 'Notes', count: notes?.length },
-    { key: 'topics', label: es ? 'Temas' : 'Topics', count: topics?.length },
+    { key: 'highlights', label: L('library.highlights'), count: highlights?.length },
+    { key: 'bookmarks', label: L('library.bookmarks'), count: bookmarks?.length },
+    { key: 'notes', label: L('library.notes'), count: notes?.length },
+    { key: 'topics', label: L('library.topics'), count: topics?.length },
   ];
 
   const shownHighlights = (highlights ?? []).filter((h) => !colorFilter || h.color === colorFilter);
 
   return (
     <Screen>
-      <Txt variant="title">{es ? 'Mis versículos' : 'My Verses'}</Txt>
+      <Txt variant="title">{L('library.title')}</Txt>
       <Row style={{ flexWrap: 'wrap', marginTop: 12, marginBottom: 16 }}>
         {tabs.map((x) => (
           <Chip key={x.key} label={`${x.label}${x.count ? ` · ${x.count}` : ''}`} selected={tab === x.key} onPress={() => setTab(x.key)} />
@@ -90,7 +91,7 @@ export default function LibraryScreen() {
       {tab === 'highlights' && (
         <View style={{ gap: 10 }}>
           <Row style={{ flexWrap: 'wrap' }} gap={8}>
-            <Chip label={es ? 'Todos' : 'All'} selected={!colorFilter} onPress={() => setColorFilter(null)} />
+            <Chip label={L('common.all')} selected={!colorFilter} onPress={() => setColorFilter(null)} />
             {HIGHLIGHT_KEYS.map((c) => (
               <Pressable
                 key={c}
@@ -101,7 +102,7 @@ export default function LibraryScreen() {
             ))}
           </Row>
           {shownHighlights.length === 0 ? (
-            <Empty icon="color-palette-outline" title={es ? 'Sin resaltados' : 'No highlights yet'} body={es ? 'Toca un versículo en el lector y elige un color.' : 'Tap a verse in the reader and pick a color.'} />
+            <Empty icon="color-palette-outline" title={L('library.noHighlights')} body={L('library.noHighlightsHint')} />
           ) : (
             shownHighlights.map((h) => (
               <VerseListItem
@@ -115,11 +116,11 @@ export default function LibraryScreen() {
                 extra={
                   h.words ? (
                     <Txt variant="caption" muted>
-                      {es ? 'Palabras resaltadas' : 'Highlighted words'}
+                      {L('library.wordsHighlighted')}
                     </Txt>
                   ) : null
                 }
-                right={<IconButton icon="trash-outline" size={18} label="Delete highlight" onPress={() => deleteHighlight(db, h.id)} />}
+                right={<IconButton icon="trash-outline" size={18} label={L('library.deleteHighlight')} onPress={() => deleteHighlight(db, h.id)} />}
               />
             ))
           )}
@@ -129,7 +130,7 @@ export default function LibraryScreen() {
       {tab === 'bookmarks' && (
         <View style={{ gap: 10 }}>
           {!bookmarks?.length ? (
-            <Empty icon="bookmark-outline" title={es ? 'Sin marcadores' : 'No bookmarks yet'} />
+            <Empty icon="bookmark-outline" title={L('library.noBookmarks')} />
           ) : (
             bookmarks.map((b) => (
               <VerseListItem
@@ -139,7 +140,7 @@ export default function LibraryScreen() {
                 v={b.v}
                 lang={lang}
                 text={b.text}
-                right={<IconButton icon="bookmark" size={18} label="Remove bookmark" onPress={() => toggleBookmark(db, b)} />}
+                right={<IconButton icon="bookmark" size={18} label={L('library.removeBookmark')} onPress={() => toggleBookmark(db, b)} />}
               />
             ))
           )}
@@ -149,7 +150,7 @@ export default function LibraryScreen() {
       {tab === 'notes' && (
         <View style={{ gap: 10 }}>
           {!notes?.length ? (
-            <Empty icon="create-outline" title={es ? 'Sin notas' : 'No notes yet'} />
+            <Empty icon="create-outline" title={L('library.noNotes')} />
           ) : (
             notes.map((n) => (
               <VerseListItem
@@ -172,12 +173,12 @@ export default function LibraryScreen() {
 
       {tab === 'topics' && (
         <View style={{ gap: 10 }}>
-          <Button title={es ? 'Nuevo tema' : 'New topic'} icon="add" kind="secondary" onPress={() => setNewTopic(true)} style={{ alignSelf: 'flex-start' }} />
+          <Button title={L('topics.new')} icon="add" kind="secondary" onPress={() => setNewTopic(true)} style={{ alignSelf: 'flex-start' }} />
           {!topics?.length ? (
             <Empty
               icon="pricetags-outline"
-              title={es ? 'Sin temas' : 'No topics yet'}
-              body={es ? 'Agrupa versículos por tema: "Ansiedad", "Fe", "Para mi amigo"...' : 'Group verses by theme: "Anxiety", "Faith", "For my friend"...'}
+              title={L('library.noTopics')}
+              body={L('library.noTopicsHint')}
             />
           ) : (
             <View style={styles.topicGrid}>
@@ -187,7 +188,7 @@ export default function LibraryScreen() {
                     {tp.name}
                   </Txt>
                   <Txt variant="small" muted>
-                    {tp.count} {es ? (tp.count === 1 ? 'versículo' : 'versículos') : tp.count === 1 ? 'verse' : 'verses'}
+                    {tn('common.verses', tp.count)}
                   </Txt>
                 </Card>
               ))}
@@ -196,12 +197,12 @@ export default function LibraryScreen() {
         </View>
       )}
 
-      <Sheet visible={newTopic} onClose={() => setNewTopic(false)} title={es ? 'Nuevo tema' : 'New topic'}>
+      <Sheet visible={newTopic} onClose={() => setNewTopic(false)} title={L('topics.new')}>
         <TextInput
           value={topicName}
           onChangeText={setTopicName}
           autoFocus
-          placeholder={es ? 'Nombre del tema' : 'Topic name'}
+          placeholder={L('topics.name')}
           placeholderTextColor={t.textSecondary}
           style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.cardAlt }]}
         />
@@ -209,7 +210,7 @@ export default function LibraryScreen() {
           <ColorSwatches value={topicColor} onChange={(c) => c && setTopicColor(c)} />
         </View>
         <Button
-          title={es ? 'Crear' : 'Create'}
+          title={L('common.create')}
           disabled={!topicName.trim()}
           onPress={async () => {
             await createTopic(db, topicName, topicColor);

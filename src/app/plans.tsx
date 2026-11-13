@@ -4,11 +4,12 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Button, Card, Chip, IconButton, ProgressBar, Row, Screen, SectionTitle, Sheet, Txt } from '@/components/ui';
-import { BOOKS, bookName } from '@/data/books';
+import { BOOKS, bookAbbr, bookName } from '@/data/books';
 import { PLAN_KINDS, planChapters, type PlanKind } from '@/data/plans';
 import { useLive } from '@/hooks/use-live';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
+import { useT, type TKey } from '@/i18n';
 import { localDay } from '@/lib/db';
 import { createPlan, getPlanProgress, getPlans } from '@/lib/plans';
 
@@ -18,7 +19,7 @@ export default function PlansScreen() {
   const db = useSQLiteContext();
   const t = useTheme();
   const { lang } = useTranslations();
-  const es = lang === 'es';
+  const { t: tr, tn, date } = useT();
   const plans = useLive(
     async (d) => Promise.all((await getPlans(d)).map((p) => getPlanProgress(d, p))),
     [],
@@ -31,7 +32,7 @@ export default function PlansScreen() {
     const preset = PLAN_KINDS.find((p) => p.kind === kind);
     setDraft({
       kind,
-      name: preset ? (es ? preset.es : preset.en) : es ? 'Mi plan' : 'My plan',
+      name: preset ? tr(`plans.kind.${preset.kind}` as TKey) : tr('plans.myPlan'),
       days: String(preset?.days ?? 30),
       books: [],
       start: 'today',
@@ -71,13 +72,13 @@ export default function PlansScreen() {
   return (
     <Screen>
       <Row>
-        <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.navigate('/'))} />
+        <IconButton icon="chevron-back" label={tr('common.back')} onPress={() => (router.canGoBack() ? router.back() : router.navigate('/'))} />
         <Txt variant="title" style={{ flex: 1 }}>
-          {es ? 'Planes de lectura' : 'Reading plans'}
+          {tr('plans.title')}
         </Txt>
       </Row>
 
-      {active.length > 0 && <SectionTitle>{es ? 'Activos' : 'Active'}</SectionTitle>}
+      {active.length > 0 && <SectionTitle>{tr('plans.active')}</SectionTitle>}
       <View style={{ gap: 10 }}>
         {active.map((p) => (
           <Card key={p.plan.id} onPress={() => router.push({ pathname: '/plan/[id]', params: { id: p.plan.id } })} style={{ gap: 8 }}>
@@ -86,53 +87,47 @@ export default function PlansScreen() {
                 {p.plan.name}
               </Txt>
               <Txt variant="small" muted>
-                {es ? 'Día' : 'Day'} {Math.min(p.plan.days, Math.max(1, p.todayIndex + 1))}/{p.plan.days}
+                {tr('plan.dayOf', { day: Math.min(p.plan.days, Math.max(1, p.todayIndex + 1)), total: p.plan.days })}
               </Txt>
             </Row>
             <ProgressBar value={p.doneChapters / p.totalChapters} />
             <Txt variant="small" color={p.behind > 0 ? t.danger : t.success}>
-              {p.behind > 0
-                ? es
-                  ? `${p.behind} capítulos atrasado`
-                  : `${p.behind} chapters behind`
-                : es
-                  ? 'Al día ✓'
-                  : 'On track ✓'}
+              {p.behind > 0 ? tn('today.behind', p.behind) : `${tr('today.onTrack')} ✓`}
             </Txt>
           </Card>
         ))}
       </View>
 
-      <SectionTitle>{es ? 'Empezar un plan' : 'Start a plan'}</SectionTitle>
+      <SectionTitle>{tr('plans.start')}</SectionTitle>
       <View style={styles.grid}>
         {PLAN_KINDS.map((k) => (
           <Card key={k.kind} onPress={() => open(k.kind)} style={styles.tile}>
-            <Txt variant="label">{es ? k.es : k.en}</Txt>
+            <Txt variant="label">{tr(`plans.kind.${k.kind}` as TKey)}</Txt>
             <Txt variant="small" muted>
-              {es ? k.descEs : k.descEn}
+              {tr(`plans.kind.${k.kind}.desc` as TKey)}
             </Txt>
             <Txt variant="caption" color={t.accent}>
-              {planChapters(k.kind).length} {es ? 'capítulos' : 'chapters'} · {k.days} {es ? 'días' : 'days'}
+              {tn('common.chapters', planChapters(k.kind).length)} · {tn('common.days', k.days)}
             </Txt>
           </Card>
         ))}
         <Card onPress={() => open('custom')} style={styles.tile}>
-          <Txt variant="label">{es ? 'Personalizado' : 'Custom'}</Txt>
+          <Txt variant="label">{tr('plans.custom')}</Txt>
           <Txt variant="small" muted>
-            {es ? 'Elige los libros y las fechas.' : 'Choose the books and the dates.'}
+            {tr('plans.customDesc')}
           </Txt>
         </Card>
       </View>
 
       {finished.length > 0 && (
         <>
-          <SectionTitle>{es ? 'Completados' : 'Completed'}</SectionTitle>
+          <SectionTitle>{tr('plans.completed')}</SectionTitle>
           {finished.map((p) => (
             <Card key={p.plan.id} onPress={() => router.push({ pathname: '/plan/[id]', params: { id: p.plan.id } })} style={{ marginBottom: 8 }}>
               <Txt variant="label">🏁 {p.plan.name}</Txt>
               {p.plan.completed_at && (
                 <Txt variant="small" muted>
-                  {new Date(p.plan.completed_at).toLocaleDateString()}
+                  {date(p.plan.completed_at)}
                 </Txt>
               )}
             </Card>
@@ -140,15 +135,15 @@ export default function PlansScreen() {
         </>
       )}
 
-      <Sheet visible={!!draft} onClose={() => setDraft(null)} title={es ? 'Nuevo plan' : 'New plan'}>
+      <Sheet visible={!!draft} onClose={() => setDraft(null)} title={tr('plans.new')}>
         {draft && (
           <View style={{ gap: 12 }}>
-            <Txt variant="label">{es ? 'Nombre' : 'Name'}</Txt>
+            <Txt variant="label">{tr('plans.name')}</Txt>
             <TextInput value={draft.name} onChangeText={(name) => setDraft({ ...draft, name })} style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.cardAlt }]} />
 
             {draft.kind === 'custom' && (
               <>
-                <Txt variant="label">{es ? 'Libros' : 'Books'}</Txt>
+                <Txt variant="label">{tr('picker.books')}</Txt>
                 <View style={styles.bookWrap}>
                   {BOOKS.map((b) => {
                     const on = draft.books.includes(b.n);
@@ -158,7 +153,7 @@ export default function PlansScreen() {
                         onPress={() => setDraft({ ...draft, books: on ? draft.books.filter((x) => x !== b.n) : [...draft.books, b.n].sort((a, c) => a - c) })}
                         style={[styles.bookChip, { backgroundColor: on ? t.accent : t.cardAlt }]}>
                         <Txt variant="caption" color={on ? t.onAccent : t.text} style={{ fontWeight: '600' }}>
-                          {lang === 'es' ? b.esAbbr : b.enAbbr}
+                          {bookAbbr(b.n, lang)}
                         </Txt>
                       </Pressable>
                     );
@@ -172,13 +167,13 @@ export default function PlansScreen() {
               </>
             )}
 
-            <Txt variant="label">{es ? 'Empezar' : 'Start'}</Txt>
+            <Txt variant="label">{tr('plans.startWhen')}</Txt>
             <Row>
-              <Chip label={es ? 'Hoy' : 'Today'} selected={draft.start === 'today'} onPress={() => setDraft({ ...draft, start: 'today' })} />
-              <Chip label={es ? 'Mañana' : 'Tomorrow'} selected={draft.start === 'tomorrow'} onPress={() => setDraft({ ...draft, start: 'tomorrow' })} />
+              <Chip label={tr('tab.today')} selected={draft.start === 'today'} onPress={() => setDraft({ ...draft, start: 'today' })} />
+              <Chip label={tr('common.tomorrow')} selected={draft.start === 'tomorrow'} onPress={() => setDraft({ ...draft, start: 'tomorrow' })} />
             </Row>
 
-            <Txt variant="label">{es ? 'Duración (días)' : 'Length (days)'}</Txt>
+            <Txt variant="label">{tr('plans.length')}</Txt>
             <Row style={{ flexWrap: 'wrap' }}>
               {DAY_PRESETS.map((d) => (
                 <Chip key={d} label={`${d}`} selected={daysNum === d} onPress={() => setDraft({ ...draft, days: String(d), finishBy: '' })} />
@@ -191,7 +186,7 @@ export default function PlansScreen() {
               />
             </Row>
             <Txt variant="small" muted>
-              {es ? '…o terminar para la fecha (AAAA-MM-DD):' : '…or finish by date (YYYY-MM-DD):'}
+              {tr('plans.finishBy')}
             </Txt>
             <TextInput
               value={draft.finishBy}
@@ -203,19 +198,15 @@ export default function PlansScreen() {
 
             <Card style={{ backgroundColor: t.accentSoft, borderColor: t.accentSoft }}>
               <Txt variant="label">
-                {chapterCount} {es ? 'capítulos' : 'chapters'} · {daysNum} {es ? 'días' : 'days'}
+                {tn('common.chapters', chapterCount)} · {tn('common.days', daysNum)}
               </Txt>
               <Txt variant="small" muted>
                 {chapterCount
-                  ? es
-                    ? `≈ ${(chapterCount / daysNum).toFixed(1)} capítulos por día`
-                    : `≈ ${(chapterCount / daysNum).toFixed(1)} chapters a day`
-                  : es
-                    ? 'Elige al menos un libro.'
-                    : 'Pick at least one book.'}
+                  ? tr('plans.perDay', { n: (chapterCount / daysNum).toFixed(1) })
+                  : tr('plans.pickBook')}
               </Txt>
             </Card>
-            <Button title={es ? 'Empezar plan' : 'Start plan'} icon="play" disabled={!chapterCount || !draft.name.trim()} onPress={save} />
+            <Button title={tr('plans.startPlan')} icon="play" disabled={!chapterCount || !draft.name.trim()} onPress={save} />
           </View>
         )}
       </Sheet>

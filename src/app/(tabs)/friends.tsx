@@ -5,6 +5,7 @@ import { Platform, Share, StyleSheet, TextInput, View } from 'react-native';
 import { Button, Card, Empty, IconButton, Ionicons, ProgressBar, Row, Screen, SectionTitle, Txt } from '@/components/ui';
 import { useRemote } from '@/hooks/use-remote';
 import { useTheme } from '@/hooks/use-theme';
+import { useT } from '@/i18n';
 import { localDay } from '@/lib/db';
 import { useHub } from '@/lib/hub';
 import {
@@ -29,16 +30,17 @@ function share(message: string) {
 
 export default function FriendsScreen() {
   const hub = useHub();
+  const { t: tr } = useT();
 
   if (!hub) {
     return (
       <Screen>
-        <Txt variant="title">Friends</Txt>
+        <Txt variant="title">{tr('tab.friends')}</Txt>
         <Empty
           icon="people"
-          title="Read together"
-          body="Connect to your Lámpara hub to sync your devices, add friends and start reading challenges — like a running app, but for the Bible."
-          action={<Button title="Connect to your hub" icon="cloud-outline" onPress={() => router.push('/hub')} style={{ marginTop: 8 }} />}
+          title={tr('friends.emptyTitle')}
+          body={tr('friends.emptyBody')}
+          action={<Button title={tr('settings.connect')} icon="cloud-outline" onPress={() => router.push('/hub')} style={{ marginTop: 8 }} />}
         />
       </Screen>
     );
@@ -48,6 +50,7 @@ export default function FriendsScreen() {
 
 function Connected() {
   const t = useTheme();
+  const { t: tr, tn } = useT();
   const hub = useHub()!;
   const today = localDay();
   const challenges = useRemote(async () => {
@@ -69,7 +72,7 @@ function Connected() {
     setMsg(null);
     try {
       const u = await addFriendByCode(code);
-      setMsg({ ok: true, text: `Friend request sent to ${u.name}.` });
+      setMsg({ ok: true, text: tr('friends.sentTo', { name: u.name }) });
       setCode('');
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
@@ -81,8 +84,8 @@ function Connected() {
   return (
     <Screen>
       <Row style={{ justifyContent: 'space-between' }}>
-        <Txt variant="title">Friends</Txt>
-        <Button small kind="secondary" icon="add" title="New challenge" onPress={() => router.push('/challenge/new')} />
+        <Txt variant="title">{tr('tab.friends')}</Txt>
+        <Button small kind="secondary" icon="add" title={tr('friends.newChallenge')} onPress={() => router.push('/challenge/new')} />
       </Row>
       <Txt muted variant="small">
         Signed in as {hub.user.name} · your friend code{' '}
@@ -98,13 +101,12 @@ function Connected() {
         </Card>
       )}
 
-      <SectionTitle>Challenges</SectionTitle>
+      <SectionTitle>{tr('friends.challenges')}</SectionTitle>
       {active.length === 0 ? (
         <Card style={{ gap: 8 }}>
-          <Txt>No active challenges.</Txt>
+          <Txt>{tr('friends.noChallenges')}</Txt>
           <Txt variant="small" muted>
-            Set a goal with friends — like 30 chapters in 2 weeks, or reading every day this month — and push each other to
-            finish.
+            {tr('friends.noChallengesHint')}
           </Txt>
         </Card>
       ) : (
@@ -119,7 +121,7 @@ function Connected() {
                     {c.title}
                   </Txt>
                   <Txt variant="small" muted>
-                    {c.start_day > today ? 'starts soon' : `${daysLeft} days left`}
+                    {c.start_day > today ? tr('friends.startsSoon') : tn('friends.daysLeft', daysLeft)}
                   </Txt>
                 </Row>
                 <ProgressBar value={me ? me.progress / target : 0} color={me?.done ? t.success : t.accent} />
@@ -135,26 +137,26 @@ function Connected() {
 
       {incoming.length > 0 && (
         <>
-          <SectionTitle>Friend requests</SectionTitle>
+          <SectionTitle>{tr('friends.requests')}</SectionTitle>
           {incoming.map((f) => (
             <Card key={f.friendshipId} style={{ marginBottom: 8 }}>
               <Row style={{ justifyContent: 'space-between' }}>
                 <Txt variant="label" style={{ flex: 1 }}>
                   {f.user.name}
                 </Txt>
-                <Button small title="Accept" onPress={() => acceptFriend(f.friendshipId)} />
-                <IconButton icon="close" label="Decline" onPress={() => removeFriend(f.friendshipId)} />
+                <Button small title={tr('friends.accept')} onPress={() => acceptFriend(f.friendshipId)} />
+                <IconButton icon="close" label={tr('friends.decline')} onPress={() => removeFriend(f.friendshipId)} />
               </Row>
             </Card>
           ))}
         </>
       )}
 
-      <SectionTitle>Friends</SectionTitle>
+      <SectionTitle>{tr('tab.friends')}</SectionTitle>
       <Card style={{ gap: 4 }}>
         {accepted.length === 0 && outgoing.length === 0 && (
           <Txt variant="small" muted style={{ marginBottom: 6 }}>
-            Add a friend with their friend code (they can find it on this screen).
+            {tr('friends.addHint')}
           </Txt>
         )}
         {accepted.map((f) => (
@@ -172,20 +174,20 @@ function Connected() {
             <Txt style={{ flex: 1 }} muted>
               {f.user.name} · request sent
             </Txt>
-            <IconButton icon="close" size={18} label="Cancel request" onPress={() => removeFriend(f.friendshipId)} />
+            <IconButton icon="close" size={18} label={tr('friends.cancelRequest')} onPress={() => removeFriend(f.friendshipId)} />
           </Row>
         ))}
         <Row style={{ marginTop: 10 }}>
           <TextInput
             value={code}
             onChangeText={(v) => setCode(v.toUpperCase())}
-            placeholder="Friend code"
+            placeholder={tr('friends.code')}
             placeholderTextColor={t.textSecondary}
             autoCapitalize="characters"
             autoCorrect={false}
             style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.cardAlt }]}
           />
-          <Button small title="Add" icon="person-add-outline" disabled={code.trim().length < 4} onPress={add} />
+          <Button small title={tr('friends.add')} icon="person-add-outline" disabled={code.trim().length < 4} onPress={add} />
         </Row>
         {msg && (
           <Txt variant="small" color={msg.ok ? t.success : t.danger}>
@@ -200,18 +202,18 @@ function Connected() {
             small
             kind="ghost"
             icon="add"
-            title="New invite"
+            title={tr('friends.newInvite')}
             onPress={async () => {
               const inv = await createInvite();
-              share(`Join me on Lámpara 📖\nHub: ${hub.url}\nInvite code: ${inv.code}`);
+              share(tr('friends.inviteMessage', { url: hub.url, code: inv.code }));
             }}
           />
         }>
-        Invite someone new
+        {tr('friends.invite')}
       </SectionTitle>
       <Card style={{ gap: 4 }}>
         <Txt variant="small" muted>
-          Each invite code lets one person create an account on your hub. Only people you invite can join.
+          {tr('friends.inviteHint')}
         </Txt>
         {(invites.data ?? []).map((inv) => (
           <Row key={inv.id} style={[styles.row, { borderColor: t.border }]}>
@@ -224,8 +226,8 @@ function Connected() {
               </Txt>
             ) : (
               <>
-                <IconButton icon="share-outline" size={18} label="Share invite" onPress={() => share(`Join me on Lámpara 📖\nHub: ${hub.url}\nInvite code: ${inv.code}`)} />
-                <IconButton icon="trash-outline" size={18} label="Delete invite" color={t.textSecondary} onPress={() => deleteInvite(inv.id)} />
+                <IconButton icon="share-outline" size={18} label={tr('friends.shareInvite')} onPress={() => share(`Join me on Lámpara 📖\nHub: ${hub.url}\nInvite code: ${inv.code}`)} />
+                <IconButton icon="trash-outline" size={18} label={tr('friends.deleteInvite')} color={t.textSecondary} onPress={() => deleteInvite(inv.id)} />
               </>
             )}
           </Row>
@@ -234,7 +236,7 @@ function Connected() {
 
       {past.length > 0 && (
         <>
-          <SectionTitle>Finished challenges</SectionTitle>
+          <SectionTitle>{tr('friends.finished')}</SectionTitle>
           {past.map(({ c, me }) => (
             <Card key={c.id} onPress={() => router.push({ pathname: '/challenge/[id]', params: { id: c.id } })} style={{ marginBottom: 8 }}>
               <Txt variant="label">
