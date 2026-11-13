@@ -1,15 +1,30 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import {
+  ImageBackground,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+  type ImageSourcePropType,
+  type ScrollViewInstance,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ImportButton } from '@/components/import-button';
 import { ChapterPicker } from '@/components/reader/chapter-picker';
+import { BookView } from '@/components/reader/book-view';
+import { VerseText } from '@/components/reader/verse-text';
 import { NoteSheet, TopicSheet, WordHighlightSheet } from '@/components/reader/verse-sheets';
 import {
   Button,
   Card,
+  Chip,
   ColorSwatches,
   Empty,
   IconButton,
@@ -17,9 +32,9 @@ import {
   Row,
   Sheet,
   Txt,
-  highlightBg,
   useIsTablet,
 } from '@/components/ui';
+import { PAPERS, PAPER_KEYS } from '@/constants/paper';
 import { Fonts, ReaderMaxWidth } from '@/constants/theme';
 import { bookName, getBook } from '@/data/books';
 import { useLive } from '@/hooks/use-live';
@@ -40,8 +55,7 @@ import {
   type VerseRef,
 } from '@/lib/data';
 import { getActivePlanProgress } from '@/lib/plans';
-import { buildSegments } from '@/lib/segments';
-import { updateSettings, useSettings } from '@/lib/settings';
+import { updateSettings, useSettings, type Settings } from '@/lib/settings';
 
 export default function ReadScreen() {
   const db = useSQLiteContext();
@@ -77,6 +91,8 @@ export default function ReadScreen() {
   const selected = selection.key === chapterKey ? selection.verses : [];
   const setSelected = (fn: number[] | ((s: number[]) => number[])) =>
     setSelection({ key: chapterKey, verses: typeof fn === 'function' ? fn(selected) : fn });
+  // When turning back from the first page of a chapter, the previous chapter opens on its last page.
+  const [endKey, setEndKey] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
   const [trPicker, setTrPicker] = useState(false);
   const [fontSheet, setFontSheet] = useState(false);
@@ -144,6 +160,35 @@ export default function ReadScreen() {
     ? `${bookName(book, lang)} ${chapter}:${selected.length === 1 ? selected[0] : `${selected[0]}–${selected[selected.length - 1]}`}`
     : '';
 
+  // Paper / reading colors
+  const paper = settings.paper !== 'none' ? PAPERS[settings.paper] : null;
+  const pc = paper
+    ? { text: paper.text, accent: paper.accent, dark: paper.dark, muted: paper.muted, base: paper.base, shade: paper.shade, texture: paper.texture }
+    : { text: t.text, accent: t.accent, dark: t.dark, muted: t.textSecondary, base: t.card, shade: 'rgba(0,0,0,0.15)', texture: null };
+  const missingText = es ? `${current?.abbr} no incluye este capítulo.` : `${current?.abbr} doesn't include this chapter.`;
+
+  const renderVerse = (v: Verse, leadingSpace: boolean) => (
+    <VerseText
+      key={v.v}
+      verse={v}
+      fontSize={fontSize}
+      colors={pc}
+      selected={selected.includes(v.v)}
+      verseColor={verseHl(v.v)}
+      wordHighlights={wordHls(v.v)}
+      bookmarked={bookmarks?.has(v.v)}
+      hasNote={notes?.has(v.v)}
+      topicColor={topicDots?.get(v.v) ?? null}
+      onPress={() => toggle(v.v)}
+      leadingSpace={leadingSpace}
+    />
+  );
+
+  const prevTarget = chapter > 1 ? { b: book, c: chapter - 1 } : book > 1 ? { b: book - 1, c: getBook(book - 1).chapters } : null;
+  const bookMode = settings.readerMode === 'book';
+
+  const markRead = () => markChapterRead(db, book, chapter, tr);
+
   return (
     <View style={[styles.flex, { backgroundColor: t.background }]}>
       {/* Header */}
@@ -162,64 +207,62 @@ export default function ReadScreen() {
           </Pressable>
           <View style={{ flex: 1 }} />
           <IconButton icon="search" label="Search" onPress={() => router.push('/search')} />
-          <IconButton icon="text" label="Text size" onPress={() => setFontSheet(true)} />
+          <IconButton icon={bookMode ? 'book-outline' : 'text'} label="Display" onPress={() => setFontSheet(true)} />
         </View>
       </View>
 
+      {bookMode && verses && verses.length > 0 ? (
+        <View style={[styles.flex, { backgroundColor: t.background }]}>
+          <BookView
+            chapterKey={chapterKey}
+            verses={verses}
+            renderVerse={(v) => renderVerse(v, false)}
+            title={`${bookName(book, lang)} ${chapter}`}
+            fontSize={fontSize}
+            colors={pc}
+            startAtEnd={endKey === chapterKey}
+            allowTwoPages={settings.twoPages}
+            canPrevChapter={!!prevTarget}
+            canNextChapter={!(book === 66 && chapter === 22)}
+            onPrevChapter={() => {
+              if (!prevTarget) return;
+              setEndKey(`${tr}:${prevTarget.b}:${prevTarget.c}`);
+              go(prevTarget.b, prevTarget.c);
+            }}
+            onNextChapter={next}
+            bottomBar={
+              <Row gap={6}>
+                {!!readInfo?.count && planNext && !(planNext.book === book && planNext.ch === chapter) && (
+                  <Button small kind="ghost" icon="arrow-forward" title={`${bookName(planNext.book, lang)} ${planNext.ch}`} onPress={() => go(planNext.book, planNext.ch)} />
+                )}
+                {!!readInfo?.count && <IconButton icon="arrow-undo" size={18} label="Undo last read" color={pc.muted} onPress={() => undoLastRead(db, book, chapter)} />}
+                <Button
+                  small
+                  kind={readInfo?.count ? 'secondary' : 'primary'}
+                  icon="checkmark-done"
+                  title={readInfo?.count ? (es ? `Leído ×${readInfo.count}` : `Read ×${readInfo.count}`) : es ? 'Marcar leído' : 'Mark read'}
+                  onPress={markRead}
+                />
+              </Row>
+            }
+          />
+        </View>
+      ) : (
+      <PaperBackground texture={pc.texture} base={paper ? pc.base : t.background}>
       <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: selected.length ? 220 : 60 }}>
         <View style={[styles.page, { maxWidth: ReaderMaxWidth, paddingHorizontal: tablet ? 40 : 20 }]}>
-          <Text style={[styles.chapterTitle, { color: t.text, fontFamily: Fonts.serif }]}>
+          <Text style={[styles.chapterTitle, { color: pc.text, fontFamily: Fonts.serif }]}>
             {bookName(book, lang)} {chapter}
           </Text>
 
           {verses === undefined ? null : verses.length === 0 ? (
             <Txt muted style={{ marginVertical: 30 }}>
-              {es
-                ? `${current?.abbr} no incluye este capítulo.`
-                : `${current?.abbr} doesn't include this chapter.`}
+              {missingText}
             </Txt>
           ) : (
             paragraphs.map((para, pi) => (
-              <Text key={pi} style={[styles.paragraph, { fontSize, lineHeight: fontSize * 1.65, color: t.text, fontFamily: Fonts.serif }]}>
-                {para.map((v) => {
-                  const isSel = selected.includes(v.v);
-                  const vColor = verseHl(v.v);
-                  const segs = buildSegments(v.text, v.marks, wordHls(v.v));
-                  return (
-                    <Text
-                      key={v.v}
-                      onPress={() => toggle(v.v)}
-                      suppressHighlighting
-                      style={[
-                        isSel && { textDecorationLine: 'underline', textDecorationStyle: 'dotted', textDecorationColor: t.accent },
-                      ]}>
-                      <Text style={[styles.verseNum, { color: t.accent, fontSize: fontSize * 0.62 }]}>
-                        {' '}
-                        {v.v}
-                        {' '}
-                      </Text>
-                      {segs.map((s, si) => {
-                        const bg = s.color ?? vColor;
-                        return (
-                          <Text
-                            key={si}
-                            style={[
-                              bg && { backgroundColor: highlightBg(bg, t.dark) },
-                              s.italic && { fontStyle: 'italic' },
-                              s.bold && { fontWeight: '700' },
-                            ]}>
-                            {s.text}
-                          </Text>
-                        );
-                      })}
-                      {bookmarks?.has(v.v) && <Text style={{ color: t.accent }}> ◆</Text>}
-                      {notes?.has(v.v) && <Text style={{ color: t.accent }}> ✎</Text>}
-                      {topicDots?.has(v.v) && (
-                        <Text style={{ color: highlightBg(topicDots.get(v.v)!, !t.dark) }}> ●</Text>
-                      )}
-                    </Text>
-                  );
-                })}
+              <Text key={pi} style={[styles.paragraph, { fontSize, lineHeight: fontSize * 1.65, color: pc.text, fontFamily: Fonts.serif }]}>
+                {para.map((v) => renderVerse(v, true))}
               </Text>
             ))
           )}
@@ -281,6 +324,8 @@ export default function ReadScreen() {
           </Row>
         </View>
       </ScrollView>
+      </PaperBackground>
+      )}
 
       {/* Verse action bar */}
       {selected.length > 0 && (
@@ -356,15 +401,57 @@ export default function ReadScreen() {
         </View>
       </Sheet>
 
-      <Sheet visible={fontSheet} onClose={() => setFontSheet(false)} title={es ? 'Tamaño del texto' : 'Text size'}>
+      <Sheet visible={fontSheet} onClose={() => setFontSheet(false)} title={es ? 'Pantalla' : 'Display'}>
+        <Txt variant="label" style={{ marginBottom: 8 }}>
+          {es ? 'Estilo de lectura' : 'Reading style'}
+        </Txt>
+        <Row style={{ flexWrap: 'wrap' }}>
+          <Chip icon="reorder-four-outline" label={es ? 'Desplazar' : 'Scroll'} selected={!bookMode} onPress={() => updateSettings({ readerMode: 'scroll' })} />
+          <Chip icon="book-outline" label={es ? 'Libro (pasar páginas)' : 'Book (turn pages)'} selected={bookMode} onPress={() => updateSettings({ readerMode: 'book' })} />
+        </Row>
+        {bookMode && (
+          <Row style={{ justifyContent: 'space-between', marginTop: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Txt variant="label">{es ? 'Dos páginas' : 'Two-page spread'}</Txt>
+              <Txt variant="small" muted>
+                {es ? 'En pantallas anchas (tableta horizontal).' : 'On wide screens (tablet in landscape).'}
+              </Txt>
+            </View>
+            <Switch value={settings.twoPages} onValueChange={(v) => updateSettings({ twoPages: v })} />
+          </Row>
+        )}
+
+        <Txt variant="label" style={{ marginTop: 18, marginBottom: 8 }}>
+          {es ? 'Papel' : 'Paper'}
+        </Txt>
+        <View style={styles.paperGrid}>
+          <PaperSwatch label={es ? 'Ninguno' : 'None'} selected={settings.paper === 'none'} base={t.background} text={t.text} onPress={() => updateSettings({ paper: 'none' })} />
+          {PAPER_KEYS.map((k) => (
+            <PaperSwatch
+              key={k}
+              label={es ? PAPERS[k].es : PAPERS[k].en}
+              selected={settings.paper === k}
+              base={PAPERS[k].base}
+              text={PAPERS[k].text}
+              texture={PAPERS[k].texture}
+              onPress={() => updateSettings({ paper: k as Settings['paper'] })}
+            />
+          ))}
+        </View>
+
+        <Txt variant="label" style={{ marginTop: 18 }}>
+          {es ? 'Tamaño del texto' : 'Text size'}
+        </Txt>
         <Row style={{ justifyContent: 'center', gap: 24 }}>
           <IconButton icon="remove-circle-outline" size={34} label="Smaller" onPress={() => updateSettings({ fontSize: Math.max(13, fontSize - 1) })} />
           <Txt variant="title">{fontSize}</Txt>
           <IconButton icon="add-circle-outline" size={34} label="Bigger" onPress={() => updateSettings({ fontSize: Math.min(34, fontSize + 1) })} />
         </Row>
-        <Txt variant="serif" style={{ fontSize, lineHeight: fontSize * 1.6, marginTop: 16 }}>
-          {es ? 'Lámpara es a mis pies tu palabra.' : 'Your word is a lamp to my feet.'}
-        </Txt>
+        <PaperBackground texture={pc.texture} base={paper ? pc.base : t.cardAlt} style={{ borderRadius: 12, padding: 14, marginTop: 8 }}>
+          <Text style={{ fontFamily: Fonts.serif, fontSize, lineHeight: fontSize * 1.6, color: pc.text }}>
+            {es ? 'Lámpara es a mis pies tu palabra.' : 'Your word is a lamp to my feet.'}
+          </Text>
+        </PaperBackground>
       </Sheet>
 
       {tr && (
@@ -402,8 +489,64 @@ export default function ReadScreen() {
   );
 }
 
+/** Tiled paper texture behind the content (or a flat color when there's no texture). */
+function PaperBackground({
+  texture,
+  base,
+  style,
+  children,
+}: {
+  texture: ImageSourcePropType | null;
+  base: string;
+  style?: object;
+  children: React.ReactNode;
+}) {
+  const s = [{ flex: style ? undefined : 1, backgroundColor: base, overflow: 'hidden' as const }, style];
+  if (texture)
+    return (
+      <ImageBackground source={texture} resizeMode="repeat" style={s} imageStyle={style ? { borderRadius: 12 } : undefined}>
+        {children}
+      </ImageBackground>
+    );
+  return <View style={s}>{children}</View>;
+}
+
+function PaperSwatch({
+  label,
+  selected,
+  base,
+  text,
+  texture,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  base: string;
+  text: string;
+  texture?: ImageSourcePropType | null;
+  onPress: () => void;
+}) {
+  const t = useTheme();
+  return (
+    <Pressable onPress={onPress} accessibilityLabel={`${label} paper`} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1, alignItems: 'center', gap: 4 }]}>
+      <View style={[styles.swatch, { borderColor: selected ? t.accent : t.border, borderWidth: selected ? 3 : 1 }]}>
+        <PaperBackground texture={texture ?? null} base={base}>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: text, fontFamily: Fonts.serif, fontSize: 18, fontWeight: '700' }}>Aa</Text>
+          </View>
+        </PaperBackground>
+      </View>
+      <Txt variant="caption" muted={!selected} color={selected ? t.accent : undefined}>
+        {label}
+      </Txt>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  paperGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  swatch: { width: 64, height: 64, borderRadius: 12, overflow: 'hidden' },
   header: { borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingBottom: 8 },
   headerInner: { flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%', alignSelf: 'center' },
   refButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, flexShrink: 1 },

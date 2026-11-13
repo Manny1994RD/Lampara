@@ -9,6 +9,12 @@ export type Settings = {
   chapter: number;
   /** 'auto' = use the language of the current translation. */
   bookNames: 'auto' | 'en' | 'es';
+  /** 'scroll' = continuous page, 'book' = pages you turn. */
+  readerMode: 'scroll' | 'book';
+  /** Paper background for the reader ('none' = app colors). */
+  paper: 'none' | 'cream' | 'parchment' | 'sepia' | 'white' | 'linen' | 'night';
+  /** Two pages side by side when the screen is wide (landscape tablet). */
+  twoPages: boolean;
   /** Badge ids the user has already been shown (to celebrate new ones once). */
   seenBadges: string[];
   /** Daily verse-of-the-day notification. */
@@ -27,6 +33,9 @@ const DEFAULTS: Settings = {
   book: 43,
   chapter: 1,
   bookNames: 'auto',
+  readerMode: 'scroll',
+  paper: 'cream',
+  twoPages: true,
   seenBadges: [],
   votdEnabled: false,
   votdHour: 7,
