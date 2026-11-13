@@ -15,7 +15,12 @@ export function useTranslations(): {
 } {
   const settings = useSettings();
   const list = useLive((db) => getTranslations(db), [], ['translations']);
-  const current = list?.find((t) => t.id === settings.translationId) ?? list?.[0] ?? null;
+  const current =
+    list?.find((t) => t.id === settings.translationId) ??
+    list?.find((t) => t.id === settings.defaultBible) ??
+    list?.find((t) => !settings.hiddenBibles.includes(t.id)) ??
+    list?.[0] ??
+    null;
   const lang: Lang =
     settings.bookNames === 'auto' ? (current?.lang ?? resolveLang(settings.appLanguage)) : settings.bookNames;
   return { list, current, lang };

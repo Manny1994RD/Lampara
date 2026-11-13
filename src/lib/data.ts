@@ -121,6 +121,37 @@ export async function undoLastRead(db: SQLiteDatabase, book: number, ch: number)
   notify('reads');
 }
 
+/**
+ * `day` stored for chapters marked as read from Progress (read earlier, e.g. in another app).
+ * They count toward Bible progress but stay out of streaks, the reading calendar and results.
+ */
+export const EARLIER_DAY = '0000-00-00';
+
+/** Adds one read to each chapter, marked as read "earlier" (a chapter already read counts one more time). */
+export async function markChaptersReadEarlier(db: SQLiteDatabase, refs: { book: number; ch: number }[]) {
+  if (!refs.length) return;
+  const at = nowIso();
+  await db.withTransactionAsync(async () => {
+    for (const r of refs) {
+      await db.runAsync(
+        'INSERT INTO chapter_reads (id, book, ch, tr, day, read_at) VALUES (?, ?, ?, NULL, ?, ?)',
+        newId(),
+        r.book,
+        r.ch,
+        EARLIER_DAY,
+        at
+      );
+    }
+  });
+  notify('reads');
+}
+
+/** Removes every read of a book (all its chapters). */
+export async function clearBookReads(db: SQLiteDatabase, book: number) {
+  await db.runAsync('DELETE FROM chapter_reads WHERE book = ?', book);
+  notify('reads');
+}
+
 export async function getChapterReadCount(db: SQLiteDatabase, book: number, ch: number) {
   const r = await db.getFirstAsync<{ c: number; last: string | null }>(
     'SELECT COUNT(*) AS c, MAX(read_at) AS last FROM chapter_reads WHERE book = ? AND ch = ?',
@@ -202,8 +233,9 @@ export async function getReadingStats(db: SQLiteDatabase): Promise<ReadingStats>
   const dayRows = await db.getAllAsync<{ day: string; c: number }>(
     'SELECT day, COUNT(*) AS c FROM chapter_reads GROUP BY day ORDER BY day'
   );
-  const days = new Map(dayRows.map((r) => [r.day, r.c]));
   const totalReads = dayRows.reduce((s, r) => s + r.c, 0);
+  // Chapters marked as read "earlier" have no real day: keep them out of streaks and the calendar.
+  const days = new Map(dayRows.filter((r) => r.day !== EARLIER_DAY).map((r) => [r.day, r.c]));
   const todayReads = days.get(localDay()) ?? 0;
   const s = computeStreak(days);
 

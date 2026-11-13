@@ -31,6 +31,16 @@ export type Settings = {
   ttsRate: number;
   /** Chosen read-aloud voice per Bible language (voice identifier); missing = the device default. */
   ttsVoices: Partial<Record<'en' | 'es' | 'ko', string>>;
+  /** Read-aloud engine: natural voices from your hub (Supertonic) or the device's own voice. */
+  ttsEngine: 'natural' | 'device';
+  /** Natural hub voice per Bible language (F1–F5, M1–M5). */
+  ttsNatural: Partial<Record<'en' | 'es' | 'ko', string>>;
+  /** The Bible that opens every time the app starts (null = keep the last one used). */
+  defaultBible: string | null;
+  /** Bibles kept in Settings but left out of the reader's list. */
+  hiddenBibles: string[];
+  /** Language filter for the Bible list in Settings. */
+  bibleFilter: 'all' | 'en' | 'es' | 'ko';
 };
 
 const DEFAULTS: Settings = {
@@ -52,6 +62,11 @@ const DEFAULTS: Settings = {
   reminderMinute: 0,
   ttsRate: 1,
   ttsVoices: {},
+  ttsEngine: 'natural',
+  ttsNatural: {},
+  defaultBible: null,
+  hiddenBibles: [],
+  bibleFilter: 'all',
 };
 
 const KEY = 'settings.v1';
@@ -79,7 +94,12 @@ function load(): Settings {
 }
 
 // Must come after `store` (load() reads it immediately).
-let state: Settings = load();
+let state: Settings = withDefaultBible(load());
+
+/** At start-up, open the default Bible (if one is set). */
+function withDefaultBible(s: Settings): Settings {
+  return s.defaultBible ? { ...s, translationId: s.defaultBible } : s;
+}
 const listeners = new Set<() => void>();
 
 export function getSettings() {

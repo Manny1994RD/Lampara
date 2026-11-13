@@ -7,7 +7,8 @@ The hub is a small server that runs on your ZimaOS. It:
 - keeps your **phone, tablet and the website in sync** (reading progress, highlights, notes, topics, bookmarks, plans),
 - holds **accounts** for you and the friends you invite (invite-only — nobody else can sign up),
 - powers **friend challenges**: leaderboards, progress, cheers and nudges,
-- stores **your Bibles** (optional) so your devices don't need their own copies.
+- stores **your Bibles** (optional) so your devices don't need their own copies,
+- reads the Bible aloud with **natural voices** (English, Spanish, Korean) — a second container, `lampara-voice`.
 
 Bibles are stored only on this server (in its `pb_data` folder), never in GitHub. Only signed-in members of your hub
 can read them, and only you (the owner) can add or delete them.
@@ -18,7 +19,8 @@ It's built on [PocketBase](https://pocketbase.io) (one small program + a SQLite 
 
 ## 1. Install on ZimaOS
 
-One container runs everything: the hub **and** the website, on port 8090.
+Two containers: `lampara-hub` (the hub **and** the website, on port 8090) and `lampara-voice` (read-aloud voices,
+only reachable by the hub).
 
 Open a terminal on ZimaOS (Settings → enable SSH, then `ssh` from your PC, or the ZimaOS web terminal) and run:
 
@@ -134,6 +136,21 @@ This rebuilds the website too. Database changes (new tables/fields) are applied 
 
 To delete a Bible from the hub (and every device), tap the trash icon next to it while signed in as the owner.
 
+## 6. Natural read-aloud voices
+
+The `lampara-voice` container uses [Supertonic 3](https://github.com/supertone-inc/supertonic) to read verses in
+English, Spanish and Korean (10 voices: Female 1–5, Male 1–5). It runs on the CPU — no graphics card needed.
+
+- In the reader, tap the **headphones**. Under the sliders button choose **Natural voice** and a voice for each language.
+- The first time a verse is read, the hub makes its audio (a few seconds) and keeps it as an MP3 in
+  `server/voice_cache`, so it's instant next time. The app asks for the next verses ahead of time.
+- The cache is limited to 3 GB (oldest audio removed first); change `VOICE_CACHE_MB` in `docker-compose.yml`.
+  Deleting the folder is safe — audio is simply made again.
+- If the voice service is down or you're not signed in, the app uses the phone's own voice instead.
+- The first build downloads the Supertonic model (~400 MB) into the image; it needs ~1 GB of RAM while running.
+
+Check it: `docker logs lampara-voice` should say `Lámpara voice service on :8000`.
+
 ## Testing the server
 
 `server/test/api-test.mjs` checks invite-only sign-up, private sync, friends, challenge privacy and cheers against a
@@ -160,6 +177,8 @@ node server/test/bible-test.mjs http://127.0.0.1:8090 owner@test.local member@te
 | `pb_migrations/1763100000_bibles.js` | Tables for Bibles stored on the hub |
 | `pb_hooks/web.pb.js` | Headers the website needs (its offline database) |
 | `pb_hooks/bibles.pb.js` | `/api/lampara/bibles` routes: list, upload, read chapters, search |
+| `pb_hooks/voice.pb.js` | `/api/lampara/voice` routes: voice status and verse audio (signed-in members only) |
+| `voice/` | The `lampara-voice` container: Supertonic 3 text-to-speech with an MP3 cache |
 
 ### Privacy rules (enforced by the server)
 

@@ -8,6 +8,7 @@ web-build
 android
 ios
 server/pb_data
+server/voice_cache
 *.bblx
 *.jks
 *.p8

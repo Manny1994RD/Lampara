@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 import { Chip, IconButton, Ionicons, Row, Sheet, Txt } from '@/components/ui';
 import { ReaderMaxWidth } from '@/constants/theme';
 import { narrator, voicesFor, SPEECH_LANG } from '@/hooks/use-read-aloud';
+import { DEFAULT_NATURAL, NATURAL_VOICES } from '@/lib/hub-voice';
 import { useTheme } from '@/hooks/use-theme';
 import { useT } from '@/i18n';
 import { updateSettings, useSettings } from '@/lib/settings';
@@ -17,6 +18,9 @@ export function ListenBar({
   playing,
   verse,
   lang,
+  engine,
+  fellBack,
+  naturalOk,
   bottomInset,
 }: {
   /** e.g. "John 3" */
@@ -24,6 +28,11 @@ export function ListenBar({
   playing: boolean;
   verse: number | null;
   lang: keyof typeof SPEECH_LANG;
+  /** Voice actually reading now. */
+  engine: 'natural' | 'device';
+  fellBack: boolean;
+  /** The hub's natural voices are available. */
+  naturalOk: boolean;
   bottomInset: number;
 }) {
   const t = useTheme();
@@ -45,6 +54,8 @@ export function ListenBar({
             {playing && verse == null && <ActivityIndicator size="small" color={t.textSecondary} />}
             <Txt variant="caption" muted numberOfLines={1}>
               {playing ? (verse == null ? L('listen.loading') : L('listen.reading')) : L('listen.paused')}
+              {' · '}
+              {fellBack ? L('listen.fellBack') : engine === 'natural' ? L('listen.natural') : L('listen.device')}
             </Txt>
           </Row>
         </View>
@@ -69,12 +80,22 @@ export function ListenBar({
         <IconButton icon="options-outline" label={L('listen.voice')} onPress={() => setSheet(true)} />
         <IconButton icon="close" label={L('listen.close')} onPress={() => narrator.close()} />
       </Row>
-      <VoiceSheet visible={sheet} onClose={() => setSheet(false)} lang={lang} />
+      <VoiceSheet visible={sheet} onClose={() => setSheet(false)} lang={lang} naturalOk={naturalOk} />
     </View>
   );
 }
 
-function VoiceSheet({ visible, onClose, lang }: { visible: boolean; onClose: () => void; lang: keyof typeof SPEECH_LANG }) {
+function VoiceSheet({
+  visible,
+  onClose,
+  lang,
+  naturalOk,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  lang: keyof typeof SPEECH_LANG;
+  naturalOk: boolean;
+}) {
   const t = useTheme();
   const { t: L } = useT();
   const settings = useSettings();
@@ -93,6 +114,9 @@ function VoiceSheet({ visible, onClose, lang }: { visible: boolean; onClose: () 
   }, [visible, lang]);
 
   const pick = (id: string | undefined) => updateSettings({ ttsVoices: { ...settings.ttsVoices, [lang]: id } });
+  const natural = settings.ttsEngine === 'natural';
+  const naturalVoice = settings.ttsNatural[lang] ?? DEFAULT_NATURAL[lang];
+  const voiceName = (id: string) => L(id.startsWith('F') ? 'listen.female' : 'listen.male', { n: id.slice(1) });
 
   return (
     <Sheet visible={visible} onClose={onClose} title={L('listen.title')}>
@@ -105,9 +129,34 @@ function VoiceSheet({ visible, onClose, lang }: { visible: boolean; onClose: () 
         ))}
       </Row>
 
+      <Txt variant="label" style={{ marginTop: 18, marginBottom: 8 }}>
+        {L('listen.engine')}
+      </Txt>
+      <Row style={{ flexWrap: 'wrap' }}>
+        <Chip icon="sparkles-outline" label={L('listen.natural')} selected={natural} onPress={() => updateSettings({ ttsEngine: 'natural' })} />
+        <Chip icon="phone-portrait-outline" label={L('listen.device')} selected={!natural} onPress={() => updateSettings({ ttsEngine: 'device' })} />
+      </Row>
+      {natural && !naturalOk && (
+        <Txt variant="small" color={t.danger} style={{ marginTop: 8 }}>
+          {L('listen.naturalOff')}
+        </Txt>
+      )}
+
       <Txt variant="label" style={{ marginTop: 18, marginBottom: 4 }}>
         {L('listen.voice')}
       </Txt>
+      {natural ? (
+        <Row style={{ flexWrap: 'wrap', marginTop: 4 }}>
+          {NATURAL_VOICES.map((id) => (
+            <Chip
+              key={id}
+              label={voiceName(id)}
+              selected={naturalVoice === id}
+              onPress={() => updateSettings({ ttsNatural: { ...settings.ttsNatural, [lang]: id } })}
+            />
+          ))}
+        </Row>
+      ) : (
       <ScrollView style={{ maxHeight: 320 }}>
         <VoiceRow name={L('listen.default')} selected={!chosen} onPress={() => pick(undefined)} />
         {voices === null ? (
@@ -129,8 +178,9 @@ function VoiceSheet({ visible, onClose, lang }: { visible: boolean; onClose: () 
           </Txt>
         )}
       </ScrollView>
+      )}
       <Txt variant="small" muted style={{ marginTop: 12 }}>
-        {L('listen.hint')}
+        {natural ? L('listen.naturalHint') : L('listen.hint')}
       </Txt>
     </Sheet>
   );

@@ -57,6 +57,7 @@ import {
   type Verse,
   type VerseRef,
 } from '@/lib/data';
+import { DEFAULT_NATURAL, getVoiceStatus } from '@/lib/hub-voice';
 import { getActivePlanProgress } from '@/lib/plans';
 import { updateSettings, useSettings, type Settings } from '@/lib/settings';
 
@@ -118,8 +119,9 @@ export default function ReadScreen() {
     else if (book < 66) go(book + 1, 1);
   };
 
-  // Read aloud with the device's voice; keeps going into the next chapter.
+  // Read aloud (natural voice from the hub, or the device's voice); keeps going into the next chapter.
   const speechLang = current?.lang ?? 'en';
+  const voiceStatus = useLive(() => getVoiceStatus(), [], ['hub']);
   const listen = useReadAloud({
     verses,
     book,
@@ -127,6 +129,10 @@ export default function ReadScreen() {
     lang: speechLang,
     rate: settings.ttsRate,
     voice: settings.ttsVoices[speechLang],
+    engine: settings.ttsEngine,
+    naturalVoice: settings.ttsNatural[speechLang] ?? DEFAULT_NATURAL[speechLang],
+    naturalOk: !!voiceStatus?.available,
+    title: `${bookName(book, lang)} ${chapter}`,
     onChapterEnd: () => {
       if (book === 66 && chapter === 22) return false;
       next();
@@ -346,7 +352,16 @@ export default function ReadScreen() {
       )}
 
       {listen.open && (
-        <ListenBar label={`${bookName(book, lang)} ${chapter}`} playing={listen.playing} verse={listen.verse} lang={speechLang} bottomInset={0} />
+        <ListenBar
+          label={`${bookName(book, lang)} ${chapter}`}
+          playing={listen.playing}
+          verse={listen.verse}
+          lang={speechLang}
+          engine={listen.engine}
+          fellBack={listen.fellBack}
+          naturalOk={!!voiceStatus?.available}
+          bottomInset={0}
+        />
       )}
 
       {/* Verse action bar */}
@@ -411,7 +426,10 @@ export default function ReadScreen() {
       <ChapterPicker visible={picker} onClose={() => setPicker(false)} lang={lang} book={book} onPick={go} />
 
       <Sheet visible={trPicker} onClose={() => setTrPicker(false)} title={L('read.translation')}>
-        {(list ?? []).map((x) => (
+        {(list ?? [])
+          .filter((x) => !settings.hiddenBibles.includes(x.id) || x.id === tr)
+          .sort((a, b) => (a.lang === b.lang ? 0 : a.lang === current?.lang ? -1 : b.lang === current?.lang ? 1 : a.lang.localeCompare(b.lang)))
+          .map((x) => (
           <Pressable
             key={x.id}
             onPress={() => {
@@ -420,7 +438,13 @@ export default function ReadScreen() {
             }}
             style={({ pressed }) => [styles.trRow, { borderColor: t.border, opacity: pressed ? 0.7 : 1 }]}>
             <View style={{ flex: 1 }}>
-              <Txt variant="label">{x.abbr}</Txt>
+              <Row gap={6}>
+                <Txt variant="label">{x.abbr}</Txt>
+                <Txt variant="caption" muted style={{ textTransform: 'uppercase' }}>
+                  {x.lang}
+                </Txt>
+                {x.id === settings.defaultBible && <Ionicons name="star" size={13} color={t.accent} />}
+              </Row>
               <Txt variant="small" muted numberOfLines={1}>
                 {x.name}
               </Txt>
@@ -428,9 +452,19 @@ export default function ReadScreen() {
             {x.id === tr && <Ionicons name="checkmark-circle" size={22} color={t.accent} />}
           </Pressable>
         ))}
-        <View style={{ marginTop: 16 }}>
+        <Row style={{ marginTop: 16, flexWrap: 'wrap' }}>
+          <Button
+            small
+            kind="secondary"
+            icon="options-outline"
+            title={L('read.manageBibles')}
+            onPress={() => {
+              setTrPicker(false);
+              router.navigate('/settings');
+            }}
+          />
           <ImportButton label={L('import.another')} />
-        </View>
+        </Row>
       </Sheet>
 
       <Sheet visible={fontSheet} onClose={() => setFontSheet(false)} title={L('read.display')}>

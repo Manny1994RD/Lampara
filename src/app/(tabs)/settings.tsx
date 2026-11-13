@@ -17,7 +17,7 @@ import type { Translation } from '@/lib/data';
 import { deleteFromHub, forgetStreamingBibles, listHubBibles, removeFromDevice, saveOffline, uploadBible, type Progress } from '@/lib/hub-bibles';
 import { deleteTranslation } from '@/lib/importer';
 import { ensureNotificationPermission, notificationsSupported } from '@/lib/notifications';
-import { updateSettings, useSettings } from '@/lib/settings';
+import { getSettings, updateSettings, useSettings } from '@/lib/settings';
 
 function confirm(title: string, msg: string): Promise<boolean> {
   if (Platform.OS === 'web') return Promise.resolve(window.confirm(`${title}\n\n${msg}`));
@@ -40,6 +40,10 @@ export default function SettingsScreen() {
     [hub?.user.id ?? ''],
     ['hub']
   );
+  // Language filter for the Bible list (only shown when you have Bibles in more than one language).
+  const bibleLangs = LANGUAGES.map((l) => l.code).filter((code) => list?.some((x) => x.lang === code));
+  const filter = bibleLangs.includes(settings.bibleFilter as never) ? settings.bibleFilter : 'all';
+  const shown = (list ?? []).filter((x) => filter === 'all' || x.lang === filter);
 
   return (
     <Screen>
@@ -65,9 +69,27 @@ export default function SettingsScreen() {
             {tr('settings.noBibles')}
           </Txt>
         )}
-        {(list ?? []).map((x) => (
+        {bibleLangs.length > 1 && (
+          <Row style={{ flexWrap: 'wrap', marginBottom: 6 }} gap={6}>
+            <Chip label={`${tr('common.all')} · ${list?.length ?? 0}`} selected={filter === 'all'} onPress={() => updateSettings({ bibleFilter: 'all' })} />
+            {bibleLangs.map((l) => (
+              <Chip
+                key={l}
+                label={`${LANGUAGES.find((x) => x.code === l)?.name ?? l} · ${list?.filter((x) => x.lang === l).length ?? 0}`}
+                selected={filter === l}
+                onPress={() => updateSettings({ bibleFilter: l })}
+              />
+            ))}
+          </Row>
+        )}
+        {shown.map((x) => (
           <BibleRow key={x.id} x={x} selected={x.id === current?.id} canManage={!!canManage} signedIn={!!hub} />
         ))}
+        {(list ?? []).length > 0 && (
+          <Txt variant="caption" muted style={{ marginTop: 8 }}>
+            {tr('bibles.defaultHint')}
+          </Txt>
+        )}
         <View style={{ marginTop: 12 }}>
           <ImportButton />
         </View>
@@ -175,19 +197,49 @@ function BibleRow({ x, selected, canManage, signedIn }: { x: Translation; select
       } else if (await confirm(tr('settings.removeBibleTitle', { abbr: x.abbr }), tr('settings.removeBibleBody'))) {
         await deleteTranslation(db, x.id);
       } else return;
-      if (settings.translationId === x.id) updateSettings({ translationId: null });
+      const s = getSettings();
+      updateSettings({
+        translationId: s.translationId === x.id ? null : s.translationId,
+        defaultBible: s.defaultBible === x.id ? null : s.defaultBible,
+        hiddenBibles: s.hiddenBibles.filter((id) => id !== x.id),
+      });
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
   };
 
+  const isDefault = settings.defaultBible === x.id;
+  const hidden = settings.hiddenBibles.includes(x.id);
+  const toggleDefault = () =>
+    updateSettings(
+      isDefault
+        ? { defaultBible: null }
+        : { defaultBible: x.id, translationId: x.id, hiddenBibles: settings.hiddenBibles.filter((id) => id !== x.id) }
+    );
+  const toggleHidden = () =>
+    updateSettings({
+      hiddenBibles: hidden ? settings.hiddenBibles.filter((id) => id !== x.id) : [...settings.hiddenBibles, x.id],
+      // The default Bible can't be hidden.
+      defaultBible: !hidden && isDefault ? null : settings.defaultBible,
+    });
+
   return (
     <View style={[styles.row, { borderColor: t.border }]}>
-      <View style={{ flex: 1, gap: 2 }}>
+      <View style={{ flex: 1, gap: 2, opacity: hidden ? 0.5 : 1 }}>
         <Pressable onPress={() => updateSettings({ translationId: x.id })}>
           <Row>
             <Txt variant="label">{x.abbr}</Txt>
             {selected && <Ionicons name="checkmark-circle" size={18} color={t.accent} />}
+            {isDefault && (
+              <Txt variant="caption" color={t.accent} style={{ fontWeight: '700' }}>
+                {tr('bibles.default')}
+              </Txt>
+            )}
+            {hidden && (
+              <Txt variant="caption" muted style={{ fontWeight: '700' }}>
+                {tr('bibles.hidden')}
+              </Txt>
+            )}
           </Row>
           <Txt variant="small" muted numberOfLines={1}>
             {x.name}
@@ -238,6 +290,13 @@ function BibleRow({ x, selected, canManage, signedIn }: { x: Translation; select
           </Txt>
         )}
       </View>
+      <IconButton
+        icon={isDefault ? 'star' : 'star-outline'}
+        color={isDefault ? t.accent : undefined}
+        label={tr('bibles.makeDefault')}
+        onPress={toggleDefault}
+      />
+      <IconButton icon={hidden ? 'eye-off-outline' : 'eye-outline'} label={hidden ? tr('bibles.show') : tr('bibles.hide')} onPress={toggleHidden} />
       {(!x.hub_id || canManage) && !busy && (
         <IconButton icon="trash-outline" label={tr('common.remove')} color={t.danger} onPress={remove} />
       )}

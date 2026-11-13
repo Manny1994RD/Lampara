@@ -47,3 +47,5 @@ example
 
 # Hub server data (accounts, synced data) - never commit
 server/pb_data/
+server/voice_cache/
+voice-samples/

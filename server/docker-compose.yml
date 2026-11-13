@@ -1,6 +1,7 @@
-# Lámpara hub + website for ZimaOS (or any Docker host).
+# Lámpara hub + website + voice for ZimaOS (or any Docker host).
 #   cd server && docker compose up -d --build
 # Data (accounts, sync, challenges, Bibles) is kept in ./pb_data next to this file.
+# Read-aloud audio made by the voice service is kept in ./voice_cache (safe to delete; it is re-made).
 services:
   lampara-hub:
     build:
@@ -12,5 +13,20 @@ services:
       - "8090:8090"
     volumes:
       - ./pb_data:/pb/pb_data
+      - ./voice_cache:/voice_cache:ro
     environment:
       - TZ=America/New_York
+      - LAMPARA_VOICE_URL=http://lampara-voice:8000
+      - LAMPARA_VOICE_CACHE=/voice_cache
+
+  # Natural read-aloud voices (Supertonic 3). Not exposed outside Docker: the hub talks to it.
+  lampara-voice:
+    build: ./voice
+    container_name: lampara-voice
+    restart: unless-stopped
+    volumes:
+      - ./voice_cache:/voice_cache
+    environment:
+      - TZ=America/New_York
+      # Largest the audio cache may grow (MB); oldest audio is removed first.
+      - VOICE_CACHE_MB=3000
