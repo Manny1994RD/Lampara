@@ -4,6 +4,7 @@ import type { HighlightColor } from '@/constants/theme';
 import { localDay, newId, notify, nowIso } from './db';
 import type { Mark } from './esword';
 import { normalizeForSearch } from './esword';
+import { ensureChapter, isStreaming, lookupHubVerses, searchHubBible, touchChapter } from './hub-bibles';
 
 export type Translation = {
   id: string;
@@ -16,6 +17,10 @@ export type Translation = {
   has_nt: number;
   source_file: string | null;
   imported_at: string;
+  /** Set when this Bible is on your hub. */
+  hub_id: string | null;
+  /** 1 = the whole text is on this device; 0 = chapters are fetched from the hub as you read. */
+  offline: number;
 };
 
 export type Verse = { book: number; ch: number; v: number; text: string; marks: Mark[]; para: boolean };
@@ -45,12 +50,20 @@ export function getTranslations(db: SQLiteDatabase) {
 /* ------------------------------- reading -------------------------------- */
 
 export async function getChapter(db: SQLiteDatabase, tr: string, book: number, ch: number): Promise<Verse[]> {
-  const rows = await db.getAllAsync<{ book: number; ch: number; v: number; text: string; marks: string | null; para: number }>(
-    'SELECT book, ch, v, text, marks, para FROM verses WHERE tr = ? AND book = ? AND ch = ? ORDER BY v',
-    tr,
-    book,
-    ch
-  );
+  const load = () =>
+    db.getAllAsync<{ book: number; ch: number; v: number; text: string; marks: string | null; para: number }>(
+      'SELECT book, ch, v, text, marks, para FROM verses WHERE tr = ? AND book = ? AND ch = ? ORDER BY v',
+      tr,
+      book,
+      ch
+    );
+  let rows = await load();
+  if (rows.length === 0) {
+    // Bibles read from your hub: fetch the chapter and keep it for a while.
+    if (await ensureChapter(db, tr, book, ch)) rows = await load();
+  } else {
+    await touchChapter(db, tr, book, ch);
+  }
   return rows.map((r) => ({ ...r, marks: r.marks ? JSON.parse(r.marks) : [], para: !!r.para }));
 }
 
@@ -68,6 +81,15 @@ export async function getVerseTexts(db: SQLiteDatabase, tr: string | null, refs:
       ...params
     );
     rows.forEach((r) => map.set(refKey(r), r.text));
+  }
+  // Verses not on this device: ask the hub (Bibles read from the hub).
+  const missing = refs.filter((r) => !map.has(refKey(r)));
+  if (missing.length && (await isStreaming(db, tr))) {
+    try {
+      (await lookupHubVerses(db, tr, missing)).forEach((r) => map.set(refKey(r), r.text));
+    } catch (e) {
+      console.warn('verse lookup failed', e instanceof Error ? e.message : e);
+    }
   }
   return map;
 }
@@ -456,6 +478,7 @@ export async function searchVerses(
     .filter(Boolean);
   if (words.length === 0) return [];
   const where = words.map(() => 'norm LIKE ?').join(' AND ');
+  if (await isStreaming(db, tr)) return searchHubBible(db, tr, words, scope, limit);
   const scopeSql = scope === 'OT' ? ' AND book <= 39' : scope === 'NT' ? ' AND book >= 40' : '';
   return db.getAllAsync<{ book: number; ch: number; v: number; text: string }>(
     `SELECT book, ch, v, text FROM verses WHERE tr = ? AND ${where}${scopeSql} ORDER BY book, ch, v LIMIT ${limit}`,

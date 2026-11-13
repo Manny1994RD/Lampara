@@ -4,10 +4,11 @@ The hub is a small server that runs on your ZimaOS. It:
 
 - keeps your **phone, tablet and the website in sync** (reading progress, highlights, notes, topics, bookmarks, plans),
 - holds **accounts** for you and the friends you invite (invite-only — nobody else can sign up),
-- powers **friend challenges**: leaderboards, progress, cheers and nudges.
+- powers **friend challenges**: leaderboards, progress, cheers and nudges,
+- stores **your Bibles** (optional) so your devices don't need their own copies.
 
-**Your Bible files never go to the hub.** Each device imports its own `.bblx` files; the hub only stores *references*
-(e.g. "John 3:16, yellow") and your own notes.
+Bibles are stored only on this server (in its `pb_data` folder), never in GitHub. Only signed-in members of your hub
+can read them, and only you (the owner) can add or delete them.
 
 It's built on [PocketBase](https://pocketbase.io) (one small program + a SQLite database), packaged with Docker.
 
@@ -92,6 +93,17 @@ docker compose up -d --build
 
 Database changes (new tables/fields) are applied automatically on start-up from `pb_migrations/`.
 
+## 5. Your Bibles on the hub
+
+1. On the PC, open the Lámpara website (or the app), go to **Settings → Bibles → Import Bible (.bblx)** and pick
+   your files from `DocumentsBiblias`.
+2. Tap **Upload to hub** under each Bible (only the owner account sees this button).
+3. Every device signed in to the hub now lists those Bibles automatically. Phones keep only the ~150 chapters you
+   read most recently; tap **Save offline** to keep a whole Bible on a device (for reading without internet), or
+   **Remove from device** to free the space again.
+
+To delete a Bible from the hub (and every device), tap the trash icon next to it while signed in as the owner.
+
 ## Testing the server
 
 `server/test/api-test.mjs` checks invite-only sign-up, private sync, friends, challenge privacy and cheers against a
@@ -99,6 +111,12 @@ Database changes (new tables/fields) are applied automatically on start-up from 
 
 ```bash
 node server/test/api-test.mjs http://127.0.0.1:8090
+```
+
+`server/test/bible-test.mjs` checks the Bible routes (owner-only upload/delete, members can read, chapter/book/search):
+
+```bash
+node server/test/bible-test.mjs http://127.0.0.1:8090 owner@test.local member@test.local test-password-123
 ```
 
 ## What's inside
@@ -109,6 +127,8 @@ node server/test/api-test.mjs http://127.0.0.1:8090
 | `docker-compose.yml` | Runs it on port 8090, data in `./pb_data` |
 | `pb_migrations/1763000000_lampara.js` | Tables and permission rules |
 | `pb_hooks/lampara.pb.js` | Invite-only sign-up and the `/api/lampara/sync` endpoint |
+| `pb_migrations/1763100000_bibles.js` | Tables for Bibles stored on the hub |
+| `pb_hooks/bibles.pb.js` | `/api/lampara/bibles` routes: list, upload, read chapters, search |
 
 ### Privacy rules (enforced by the server)
 
@@ -117,3 +137,4 @@ node server/test/api-test.mjs http://127.0.0.1:8090
 - `friendships`: only the two people involved; only the receiver can accept.
 - `challenges`, `challenge_members`, `activity`: only people in that challenge. Only you can change your own progress.
 - `invites`: only the person who created them; each code is used once.
+- Bibles: any signed-in member can read; only the owner (first account) can upload or delete.

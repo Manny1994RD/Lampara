@@ -1,11 +1,12 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DB_NAME = 'lampara.db';
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 /**
  * Personal tables that sync to the hub: [sync kind, table, SQL expression for the item id].
- * Bible text (verses / translations) is never synced.
+ * Bible text (verses / translations) is not part of this sync; Bibles on the hub are
+ * handled separately (see hub-bibles.ts).
  */
 export const SYNC_TABLES: { kind: string; table: string; idExpr: (row: 'NEW' | 'OLD') => string }[] = [
   { kind: 'reads', table: 'chapter_reads', idExpr: (r) => `${r}.id` },
@@ -169,6 +170,23 @@ export async function migrateDb(db: SQLiteDatabase) {
       }
     }
     await db.execAsync(sql);
+  }
+
+  if (current < 4) {
+    await db.execAsync(`
+      -- Bibles stored on your hub. hub_id is set when the Bible is on the hub.
+      -- offline = 1: the whole text is on this device. offline = 0: chapters are fetched
+      -- from the hub as you read and only the most recent ones are kept (cached_chapters).
+      ALTER TABLE translations ADD COLUMN hub_id TEXT;
+      ALTER TABLE translations ADD COLUMN offline INTEGER NOT NULL DEFAULT 1;
+      CREATE TABLE IF NOT EXISTS cached_chapters (
+        tr TEXT NOT NULL,
+        book INTEGER NOT NULL,
+        ch INTEGER NOT NULL,
+        used_at TEXT NOT NULL,
+        PRIMARY KEY (tr, book, ch)
+      ) WITHOUT ROWID;
+    `);
   }
 
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);

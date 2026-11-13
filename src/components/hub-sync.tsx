@@ -4,13 +4,14 @@ import { AppState } from 'react-native';
 
 import { subscribe } from '@/lib/db';
 import { refreshAuth, useHub } from '@/lib/hub';
+import { refreshHubBibles } from '@/lib/hub-bibles';
 import { updateChallengeProgress } from '@/lib/social';
 import { syncNow } from '@/lib/sync';
 
 /**
  * Keeps this device in sync with your hub while you're signed in:
  * on start, a few seconds after you change something, when the app comes back
- * to the foreground, and every few minutes.
+ * to the foreground, and every few minutes. Also lists the Bibles stored on the hub.
  */
 export function HubSync() {
   const db = useSQLiteContext();
@@ -23,6 +24,10 @@ export function HubSync() {
     let alive = true;
 
     const run = async () => {
+      // Bibles on the hub show up on every device automatically.
+      await refreshHubBibles(db).catch((e) => {
+        if (alive) console.warn('hub Bibles failed', e instanceof Error ? e.message : e);
+      });
       try {
         await syncNow(db);
         await updateChallengeProgress(db);

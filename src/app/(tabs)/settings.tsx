@@ -13,6 +13,8 @@ import { Button, Card, Chip, IconButton, Ionicons, Row, Screen, SectionTitle, Tx
 import { useTheme } from '@/hooks/use-theme';
 import { LANGUAGES, getT, useT } from '@/i18n';
 import { useTranslations } from '@/hooks/use-translation';
+import type { Translation } from '@/lib/data';
+import { deleteFromHub, forgetStreamingBibles, listHubBibles, removeFromDevice, saveOffline, uploadBible, type Progress } from '@/lib/hub-bibles';
 import { deleteTranslation } from '@/lib/importer';
 import { ensureNotificationPermission, notificationsSupported } from '@/lib/notifications';
 import { updateSettings, useSettings } from '@/lib/settings';
@@ -28,11 +30,16 @@ function confirm(title: string, msg: string): Promise<boolean> {
 }
 
 export default function SettingsScreen() {
-  const db = useSQLiteContext();
-  const t = useTheme();
   const { t: tr } = useT();
   const settings = useSettings();
   const { list, current } = useTranslations();
+  const hub = useHub();
+  // Only the hub owner can upload or delete Bibles on the hub.
+  const canManage = useLive(
+    async () => (hub ? ((await listHubBibles().catch(() => null))?.can_manage ?? false) : false),
+    [hub?.user.id ?? ''],
+    ['hub']
+  );
 
   return (
     <Screen>
@@ -59,32 +66,7 @@ export default function SettingsScreen() {
           </Txt>
         )}
         {(list ?? []).map((x) => (
-          <View key={x.id} style={[styles.row, { borderColor: t.border }]}>
-            <Pressable style={{ flex: 1 }} onPress={() => updateSettings({ translationId: x.id })}>
-              <Row>
-                <Txt variant="label">{x.abbr}</Txt>
-                {x.id === current?.id && <Ionicons name="checkmark-circle" size={18} color={t.accent} />}
-              </Row>
-              <Txt variant="small" muted numberOfLines={1}>
-                {x.name}
-              </Txt>
-              <Txt variant="caption" muted>
-                {x.lang === 'es' ? 'Español' : 'English'} · {x.verse_count.toLocaleString()} verses
-                {!x.has_ot ? ' · NT only' : !x.has_nt ? ' · OT only' : ''}
-              </Txt>
-            </Pressable>
-            <IconButton
-              icon="trash-outline"
-              label={`Remove ${x.abbr}`}
-              color={t.danger}
-              onPress={async () => {
-                if (await confirm(`Remove ${x.abbr}?`, 'The Bible text is removed from this device. Your highlights, notes and reading progress are kept (word highlights made in this translation are removed).')) {
-                  await deleteTranslation(db, x.id);
-                  if (settings.translationId === x.id) updateSettings({ translationId: null });
-                }
-              }}
-            />
-          </View>
+          <BibleRow key={x.id} x={x} selected={x.id === current?.id} canManage={!!canManage} signedIn={!!hub} />
         ))}
         <View style={{ marginTop: 12 }}>
           <ImportButton />
@@ -92,6 +74,11 @@ export default function SettingsScreen() {
         <Txt variant="caption" muted style={{ marginTop: 8 }}>
           {tr('settings.bblxHint')}
         </Txt>
+        {hub && (
+          <Txt variant="caption" muted style={{ marginTop: 4 }}>
+            {tr('bibles.hubHint')}
+          </Txt>
+        )}
       </Card>
 
       <SectionTitle>{tr('settings.hub')}</SectionTitle>
@@ -157,6 +144,107 @@ export default function SettingsScreen() {
   );
 }
 
+function BibleRow({ x, selected, canManage, signedIn }: { x: Translation; selected: boolean; canManage: boolean; signedIn: boolean }) {
+  const db = useSQLiteContext();
+  const t = useTheme();
+  const { t: tr, locale } = useT();
+  const settings = useSettings();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const status = !x.hub_id ? tr('bibles.localOnly') : x.offline ? tr('bibles.saved') : tr('bibles.streaming');
+  const langName = LANGUAGES.find((l) => l.code === x.lang)?.name ?? x.lang;
+
+  const run = async (key: 'bibles.uploading' | 'bibles.saving', fn: (p: Progress) => Promise<void>) => {
+    setErr(null);
+    setBusy(tr(key, { pct: 0 }));
+    try {
+      await fn((done, total) => setBusy(tr(key, { pct: Math.round((done / Math.max(1, total)) * 100) })));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const remove = async () => {
+    try {
+      if (x.hub_id && canManage) {
+        if (await confirm(tr('bibles.deleteHubTitle', { abbr: x.abbr }), tr('bibles.deleteHubBody'))) await deleteFromHub(db, x.id);
+        else return;
+      } else if (await confirm(tr('settings.removeBibleTitle', { abbr: x.abbr }), tr('settings.removeBibleBody'))) {
+        await deleteTranslation(db, x.id);
+      } else return;
+      if (settings.translationId === x.id) updateSettings({ translationId: null });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <View style={[styles.row, { borderColor: t.border }]}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Pressable onPress={() => updateSettings({ translationId: x.id })}>
+          <Row>
+            <Txt variant="label">{x.abbr}</Txt>
+            {selected && <Ionicons name="checkmark-circle" size={18} color={t.accent} />}
+          </Row>
+          <Txt variant="small" muted numberOfLines={1}>
+            {x.name}
+          </Txt>
+          <Txt variant="caption" muted>
+            {langName} · {tr('bibles.verses', { n: x.verse_count.toLocaleString(locale) })}
+            {!x.has_ot ? ` · ${tr('settings.ntOnly')}` : !x.has_nt ? ` · ${tr('settings.otOnly')}` : ''}
+          </Txt>
+          <Row gap={4}>
+            <Ionicons
+              name={!x.hub_id ? 'phone-portrait-outline' : x.offline ? 'cloud-done-outline' : 'cloud-outline'}
+              size={13}
+              color={t.textSecondary}
+            />
+            <Txt variant="caption" muted>
+              {status}
+            </Txt>
+          </Row>
+        </Pressable>
+        {busy ? (
+          <Txt variant="caption" color={t.accent}>
+            {busy}
+          </Txt>
+        ) : (
+          <Row style={{ flexWrap: 'wrap', marginTop: 4 }} gap={6}>
+            {!x.hub_id && signedIn && canManage && (
+              <Button small kind="ghost" icon="cloud-upload-outline" title={tr('bibles.upload')} onPress={() => run('bibles.uploading', (p) => uploadBible(db, x.id, p))} />
+            )}
+            {!!x.hub_id && !x.offline && signedIn && (
+              <Button small kind="ghost" icon="download-outline" title={tr('bibles.saveOffline')} onPress={() => run('bibles.saving', (p) => saveOffline(db, x.id, p))} />
+            )}
+            {!!x.hub_id && !!x.offline && (
+              <Button
+                small
+                kind="ghost"
+                icon="phone-portrait-outline"
+                title={tr('bibles.removeFromDevice')}
+                onPress={async () => {
+                  if (await confirm(tr('bibles.removeFromDeviceTitle', { abbr: x.abbr }), tr('bibles.removeFromDeviceBody'))) await removeFromDevice(db, x.id);
+                }}
+              />
+            )}
+          </Row>
+        )}
+        {err && (
+          <Txt variant="caption" color={t.danger}>
+            {err}
+          </Txt>
+        )}
+      </View>
+      {(!x.hub_id || canManage) && !busy && (
+        <IconButton icon="trash-outline" label={tr('common.remove')} color={t.danger} onPress={remove} />
+      )}
+    </View>
+  );
+}
+
 function HubCard() {
   const db = useSQLiteContext();
   const t = useTheme();
@@ -218,6 +306,7 @@ function HubCard() {
           onPress={async () => {
             if (await confirm(tr('settings.signOutTitle'), tr('settings.signOutBody'))) {
               await resetSyncState(db);
+              await forgetStreamingBibles(db);
               signOut();
             }
           }}

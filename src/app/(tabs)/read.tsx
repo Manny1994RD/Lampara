@@ -166,7 +166,10 @@ export default function ReadScreen() {
   const pc = paper
     ? { text: paper.text, accent: paper.accent, dark: paper.dark, muted: paper.muted, base: paper.base, shade: paper.shade, texture: paper.texture }
     : { text: t.text, accent: t.accent, dark: t.dark, muted: t.textSecondary, base: t.card, shade: 'rgba(0,0,0,0.15)', texture: null };
-  const missingText = L('read.missing', { abbr: current?.abbr ?? '' });
+  const missingText =
+    current?.hub_id && !current.offline
+      ? L('read.needHub', { abbr: current.abbr })
+      : L('read.missing', { abbr: current?.abbr ?? '' });
 
   const renderVerse = (v: Verse, leadingSpace: boolean) => (
     <VerseText
