@@ -50,9 +50,6 @@ const DEFAULTS: Settings = {
 
 const KEY = 'settings.v1';
 
-let state: Settings = load();
-const listeners = new Set<() => void>();
-
 // On the web, synchronous SQLite needs cross-origin isolation (not available in every browser/webview),
 // so small settings live in localStorage there. Phones use the SQLite key-value store.
 const store = {
@@ -74,6 +71,10 @@ function load(): Settings {
     return DEFAULTS;
   }
 }
+
+// Must come after `store` (load() reads it immediately).
+let state: Settings = load();
+const listeners = new Set<() => void>();
 
 export function getSettings() {
   return state;

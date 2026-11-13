@@ -44,7 +44,7 @@ export default function ResultsScreen() {
     setMsg(null);
     try {
       if (Platform.OS === 'web') {
-        const dataUri = await captureRef(cardRef, { format: 'png', quality: 1, result: 'data-uri' });
+        const dataUri = await captureRef(cardRef, { format: 'png', quality: 1, width: CARD_W * 3, height: CARD_H * 3, result: 'data-uri' });
         const blob = await (await fetch(dataUri)).blob();
         const file = new File([blob], 'lampara-results.png', { type: 'image/png' });
         const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
@@ -63,6 +63,7 @@ export default function ResultsScreen() {
         else setMsg(tr('results.shareFailed'));
       }
     } catch (e) {
+      console.warn('share failed', e);
       if (!(e instanceof Error && e.name === 'AbortError')) setMsg(tr('results.shareFailed'));
     } finally {
       setBusy(false);
@@ -107,12 +108,12 @@ export default function ResultsScreen() {
               <Text style={styles.range}>{rangeLabel}</Text>
             </Row>
 
-            <View style={{ marginTop: 26 }}>
+            <View style={{ marginTop: 18 }}>
               {hub?.user.name ? <Text style={styles.name}>{hub.user.name}</Text> : null}
               <Text style={styles.headline}>{tr(`results.headline.${period}` as TKey)}</Text>
             </View>
 
-            <View style={{ marginTop: 22 }}>
+            <View style={{ marginTop: 12 }}>
               <Text style={styles.bigNumber}>{data?.chapters ?? 0}</Text>
               <Text style={styles.bigLabel}>{tr('results.chapters')}</Text>
             </View>
@@ -124,7 +125,7 @@ export default function ResultsScreen() {
                   <View key={d.day} style={styles.barSlot}>
                     <View
                       style={{
-                        height: Math.max(3, (d.n / maxBar) * 56),
+                        height: Math.max(3, (d.n / maxBar) * 40),
                         borderRadius: 3,
                         backgroundColor: d.n ? FLAME : 'rgba(255,255,255,0.12)',
                       }}
@@ -142,7 +143,7 @@ export default function ResultsScreen() {
             </View>
 
             {data && data.books.length > 0 ? (
-              <View style={{ marginTop: 16 }}>
+              <View style={{ marginTop: 12 }}>
                 <Text style={styles.smallLabel}>{tr('results.books')}</Text>
                 <Text style={styles.books} numberOfLines={2}>
                   {data.books
@@ -160,7 +161,7 @@ export default function ResultsScreen() {
 
             {votd?.text ? (
               <View style={styles.verseBox}>
-                <Text style={styles.verse} numberOfLines={4}>
+                <Text style={styles.verse} numberOfLines={3}>
                   “{votd.text}”
                 </Text>
                 <Text style={styles.verseRef}>
@@ -211,18 +212,18 @@ const styles = StyleSheet.create({
   range: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', fontFamily: Fonts.sans, textTransform: 'capitalize' },
   name: { color: FLAME, fontSize: 14, fontWeight: '700', fontFamily: Fonts.sans, marginBottom: 4 },
   headline: { color: '#fff', fontSize: 28, lineHeight: 33, fontWeight: '800', fontFamily: Fonts.sans, letterSpacing: -0.6 },
-  bigNumber: { color: '#fff', fontSize: 84, lineHeight: 88, fontWeight: '800', fontFamily: Fonts.sans, letterSpacing: -3 },
+  bigNumber: { color: '#fff', fontSize: 72, lineHeight: 76, fontWeight: '800', fontFamily: Fonts.sans, letterSpacing: -3 },
   bigLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 15, fontWeight: '600', fontFamily: Fonts.sans },
-  bars: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 60, marginTop: 14 },
+  bars: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 42, marginTop: 10 },
   barSlot: { flex: 1, justifyContent: 'flex-end' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 18 },
-  stat: { width: '47%', flexGrow: 1, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 16, padding: 12 },
-  statValue: { color: '#fff', fontSize: 24, fontWeight: '800', fontFamily: Fonts.sans },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
+  stat: { width: '47%', flexGrow: 1, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 9 },
+  statValue: { color: '#fff', fontSize: 22, fontWeight: '800', fontFamily: Fonts.sans },
   statLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', fontFamily: Fonts.sans, marginTop: 2 },
   smallLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '700', fontFamily: Fonts.sans, textTransform: 'uppercase', letterSpacing: 0.8 },
   books: { color: '#fff', fontSize: 15, fontWeight: '600', fontFamily: Fonts.sans, marginTop: 4 },
-  verseBox: { borderLeftWidth: 3, borderLeftColor: FLAME, paddingLeft: 12, marginBottom: 14 },
-  verse: { color: '#fff', fontSize: 15, lineHeight: 22, fontFamily: Fonts.serif },
+  verseBox: { borderLeftWidth: 3, borderLeftColor: FLAME, paddingLeft: 12, marginBottom: 12, marginTop: 10 },
+  verse: { color: '#fff', fontSize: 14, lineHeight: 20, fontFamily: Fonts.serif },
   verseRef: { color: 'rgba(255,255,255,0.65)', fontSize: 12, fontWeight: '700', fontFamily: Fonts.sans, marginTop: 6 },
   footer: { color: 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: '600', fontFamily: Fonts.sans, textAlign: 'center', letterSpacing: 0.5 },
 });
