@@ -7,11 +7,18 @@ import { Ionicons, useIsTablet, type IconName } from '@/components/ui';
 import { Fonts } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-const TABS: { name: string; href: '/' | '/read' | '/progress' | '/library' | '/settings'; label: string; icon: IconName; iconActive: IconName }[] = [
+const TABS: {
+  name: string;
+  href: '/' | '/read' | '/progress' | '/library' | '/friends' | '/settings';
+  label: string;
+  icon: IconName;
+  iconActive: IconName;
+}[] = [
   { name: 'index', href: '/', label: 'Today', icon: 'sunny-outline', iconActive: 'sunny' },
   { name: 'read', href: '/read', label: 'Read', icon: 'book-outline', iconActive: 'book' },
   { name: 'progress', href: '/progress', label: 'Progress', icon: 'grid-outline', iconActive: 'grid' },
-  { name: 'library', href: '/library', label: 'My Verses', icon: 'bookmarks-outline', iconActive: 'bookmarks' },
+  { name: 'library', href: '/library', label: 'Verses', icon: 'bookmarks-outline', iconActive: 'bookmarks' },
+  { name: 'friends', href: '/friends', label: 'Friends', icon: 'people-outline', iconActive: 'people' },
   { name: 'settings', href: '/settings', label: 'Settings', icon: 'settings-outline', iconActive: 'settings' },
 ];
 

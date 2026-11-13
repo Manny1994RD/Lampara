@@ -6,6 +6,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { DatabaseBoundary } from '@/components/db-boundary';
+import { HubSync } from '@/components/hub-sync';
 import { NotificationScheduler } from '@/components/notification-scheduler';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -42,6 +43,7 @@ export default function RootLayout() {
               }>
               <SQLiteProvider databaseName={DB_NAME} onInit={migrateDb} useSuspense>
                 <NotificationScheduler />
+                <HubSync />
                 <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.background } }}>
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="search" options={{ presentation: 'modal' }} />
@@ -49,6 +51,9 @@ export default function RootLayout() {
                   <Stack.Screen name="plans" />
                   <Stack.Screen name="plan/[id]" />
                   <Stack.Screen name="badges" />
+                  <Stack.Screen name="hub" />
+                  <Stack.Screen name="challenge/new" />
+                  <Stack.Screen name="challenge/[id]" />
                 </Stack>
               </SQLiteProvider>
             </Suspense>

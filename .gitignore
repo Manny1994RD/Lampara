@@ -44,3 +44,6 @@ example
 
 # Bible files are personal and must never be committed
 *.bblx
+
+# Hub server data (accounts, synced data) - never commit
+server/pb_data/

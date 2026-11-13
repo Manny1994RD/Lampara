@@ -1,7 +1,25 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DB_NAME = 'lampara.db';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
+
+/**
+ * Personal tables that sync to the hub: [sync kind, table, SQL expression for the item id].
+ * Bible text (verses / translations) is never synced.
+ */
+export const SYNC_TABLES: { kind: string; table: string; idExpr: (row: 'NEW' | 'OLD') => string }[] = [
+  { kind: 'reads', table: 'chapter_reads', idExpr: (r) => `${r}.id` },
+  { kind: 'highlights', table: 'highlights', idExpr: (r) => `${r}.id` },
+  { kind: 'bookmarks', table: 'bookmarks', idExpr: (r) => `${r}.id` },
+  { kind: 'notes', table: 'notes', idExpr: (r) => `${r}.id` },
+  { kind: 'topics', table: 'topics', idExpr: (r) => `${r}.id` },
+  {
+    kind: 'topic_verses',
+    table: 'topic_verses',
+    idExpr: (r) => `${r}.topic_id || ':' || ${r}.book || ':' || ${r}.ch || ':' || ${r}.v`,
+  },
+  { kind: 'plans', table: 'plans', idExpr: (r) => `${r}.id` },
+];
 
 /** Runs once when the database opens. Creates / upgrades tables. */
 export async function migrateDb(db: SQLiteDatabase) {
@@ -117,6 +135,42 @@ export async function migrateDb(db: SQLiteDatabase) {
     `);
   }
 
+  if (current < 3) {
+    // Change tracking for sync: triggers record which rows changed (unless we're applying
+    // changes that came from the hub, flagged by sync_meta.applying = 1).
+    let sql = `
+      CREATE TABLE IF NOT EXISTS outbox (
+        kind TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        ver INTEGER NOT NULL DEFAULT 1,
+        PRIMARY KEY (kind, item_id)
+      ) WITHOUT ROWID;
+      CREATE TABLE IF NOT EXISTS sync_meta (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        applying INTEGER NOT NULL DEFAULT 0,
+        cursor INTEGER NOT NULL DEFAULT 0,
+        last_sync TEXT
+      );
+      INSERT OR IGNORE INTO sync_meta (id, applying, cursor) VALUES (1, 0, 0);
+    `;
+    for (const t of SYNC_TABLES) {
+      for (const [ev, row] of [
+        ['INSERT', 'NEW'],
+        ['UPDATE', 'NEW'],
+        ['DELETE', 'OLD'],
+      ] as const) {
+        sql += `
+      CREATE TRIGGER IF NOT EXISTS trg_${t.table}_${ev.toLowerCase()} AFTER ${ev} ON ${t.table}
+      WHEN (SELECT applying FROM sync_meta WHERE id = 1) = 0
+      BEGIN
+        INSERT INTO outbox (kind, item_id, ver) VALUES ('${t.kind}', ${t.idExpr(row)}, 1)
+        ON CONFLICT (kind, item_id) DO UPDATE SET ver = ver + 1;
+      END;`;
+      }
+    }
+    await db.execAsync(sql);
+  }
+
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 
@@ -124,7 +178,16 @@ export async function migrateDb(db: SQLiteDatabase) {
 /* Change notifications: screens re-query when data they use changes. */
 /* ------------------------------------------------------------------ */
 
-export type Topic = 'translations' | 'reads' | 'highlights' | 'bookmarks' | 'notes' | 'topics' | 'plans';
+export type Topic =
+  | 'translations'
+  | 'reads'
+  | 'highlights'
+  | 'bookmarks'
+  | 'notes'
+  | 'topics'
+  | 'plans'
+  | 'hub'
+  | 'social';
 type Listener = (t: Topic) => void;
 const listeners = new Set<Listener>();
 

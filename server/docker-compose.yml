@@ -1,0 +1,14 @@
+# Lámpara hub for ZimaOS (or any Docker host).
+#   docker compose up -d --build
+# Data (accounts, sync, challenges) is kept in ./pb_data next to this file.
+services:
+  lampara-hub:
+    build: .
+    container_name: lampara-hub
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./pb_data:/pb/pb_data
+    environment:
+      - TZ=America/New_York

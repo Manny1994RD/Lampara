@@ -1,8 +1,15 @@
+import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
+import { useState } from 'react';
+
+import { useLive } from '@/hooks/use-live';
+import { signOut, useHub } from '@/lib/hub';
+import { updateChallengeProgress } from '@/lib/social';
+import { getSyncInfo, resetSyncState, syncNow } from '@/lib/sync';
 import { Alert, Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { ImportButton } from '@/components/import-button';
-import { Card, Chip, IconButton, Ionicons, Row, Screen, SectionTitle, Txt } from '@/components/ui';
+import { Button, Card, Chip, IconButton, Ionicons, Row, Screen, SectionTitle, Txt } from '@/components/ui';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
 import { deleteTranslation } from '@/lib/importer';
@@ -72,6 +79,9 @@ export default function SettingsScreen() {
         </Txt>
       </Card>
 
+      <SectionTitle>Hub (sync & friends)</SectionTitle>
+      <HubCard />
+
       <SectionTitle>Notifications</SectionTitle>
       {notificationsSupported ? (
         <Card style={{ gap: 14 }}>
@@ -122,15 +132,84 @@ export default function SettingsScreen() {
 
       <SectionTitle>About</SectionTitle>
       <Card style={{ gap: 6 }}>
-        <Txt variant="label">Lámpara 0.2 · Phase 2</Txt>
+        <Txt variant="label">Lámpara 0.4 · Phase 4</Txt>
         <Txt variant="small" muted>
           “Lámpara es a mis pies tu palabra, y lumbrera a mi camino.” — Salmo 119:105
         </Txt>
         <Txt variant="small" muted>
-          Coming next: tablet book mode, friend challenges and focus lock.
+          Coming next: the website on your hub and focus lock.
         </Txt>
       </Card>
     </Screen>
+  );
+}
+
+function HubCard() {
+  const db = useSQLiteContext();
+  const t = useTheme();
+  const hub = useHub();
+  const info = useLive((d) => getSyncInfo(d), [], ['hub', 'reads', 'highlights', 'notes', 'topics', 'bookmarks', 'plans']);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  if (!hub)
+    return (
+      <Card style={{ gap: 8 }}>
+        <Txt variant="small" muted>
+          Not connected. Connect to your Lámpara hub to sync your phone, tablet and the website, and to read with friends.
+        </Txt>
+        <Button small icon="cloud-outline" title="Connect to your hub" onPress={() => router.push('/hub')} style={{ alignSelf: 'flex-start' }} />
+      </Card>
+    );
+
+  return (
+    <Card style={{ gap: 8 }}>
+      <Txt variant="label">{hub.user.name}</Txt>
+      <Txt variant="small" muted>
+        {hub.user.email} · {hub.url}
+      </Txt>
+      <Txt variant="small" muted>
+        {info?.lastSync ? `Last synced ${new Date(info.lastSync).toLocaleString()}` : 'Not synced yet'}
+        {info?.pending ? ` · ${info.pending} changes waiting` : ''}
+      </Txt>
+      {err && (
+        <Txt variant="small" color={t.danger}>
+          {err}
+        </Txt>
+      )}
+      <Row>
+        <Button
+          small
+          icon="sync"
+          title="Sync now"
+          loading={busy}
+          onPress={async () => {
+            setBusy(true);
+            setErr(null);
+            try {
+              await syncNow(db);
+              await updateChallengeProgress(db);
+            } catch (e) {
+              setErr(e instanceof Error ? e.message : String(e));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+        <Button
+          small
+          kind="ghost"
+          icon="log-out-outline"
+          title="Sign out"
+          onPress={async () => {
+            if (await confirm('Sign out of the hub?', 'Everything stays on this device. Changes made while signed out sync next time you sign in.')) {
+              await resetSyncState(db);
+              signOut();
+            }
+          }}
+        />
+      </Row>
+    </Card>
   );
 }
 
