@@ -73,7 +73,7 @@
       ],
       "expo-asset",
       [
-        "expo-widgets",
+        "./plugins/with-android-widgets",
         {
           "enableAndroid": true,
           "widgets": [
