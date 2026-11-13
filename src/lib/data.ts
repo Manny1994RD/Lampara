@@ -121,11 +121,60 @@ export async function getAllReadCounts(db: SQLiteDatabase) {
 export type ReadingStats = {
   totalReads: number;
   todayReads: number;
+  /** Days in the current streak (grace days keep it alive but don't add to it). */
   streak: number;
   bestStreak: number;
+  /** Grace days available right now (0–2). */
+  graceDays: number;
+  /** Missed days that were covered by a grace day (shown in the calendar). */
+  graceUsed: Set<string>;
   days: Map<string, number>; // day -> chapters read
   lastRead: { book: number; ch: number; read_at: string } | null;
 };
+
+/** One grace day is earned for every 7 reading days in a streak; at most 2 are kept. */
+export const GRACE_EVERY = 7;
+export const GRACE_MAX = 2;
+
+/**
+ * Walks every day from the first reading day to today.
+ * A missed day uses a grace day if one is available; otherwise the streak resets.
+ * Today never breaks the streak (there's still time to read).
+ */
+export function computeStreak(days: Map<string, number>, today = localDay()) {
+  const sorted = [...days.keys()].sort();
+  let streak = 0;
+  let best = 0;
+  let grace = 0;
+  let sinceGrace = 0;
+  const graceUsed = new Set<string>();
+  if (sorted.length === 0) return { streak, best, grace, graceUsed };
+  const d = new Date(`${sorted[0]}T12:00:00`);
+  const end = new Date(`${today}T12:00:00`);
+  while (d <= end) {
+    const key = localDay(d);
+    if (days.has(key)) {
+      streak++;
+      sinceGrace++;
+      if (sinceGrace >= GRACE_EVERY) {
+        grace = Math.min(GRACE_MAX, grace + 1);
+        sinceGrace = 0;
+      }
+    } else if (key !== today) {
+      if (grace > 0 && streak > 0) {
+        grace--;
+        graceUsed.add(key);
+      } else {
+        streak = 0;
+        sinceGrace = 0;
+        grace = 0;
+      }
+    }
+    best = Math.max(best, streak);
+    d.setDate(d.getDate() + 1);
+  }
+  return { streak, best, grace, graceUsed };
+}
 
 export async function getReadingStats(db: SQLiteDatabase): Promise<ReadingStats> {
   const dayRows = await db.getAllAsync<{ day: string; c: number }>(
@@ -133,33 +182,22 @@ export async function getReadingStats(db: SQLiteDatabase): Promise<ReadingStats>
   );
   const days = new Map(dayRows.map((r) => [r.day, r.c]));
   const totalReads = dayRows.reduce((s, r) => s + r.c, 0);
-  const today = localDay();
-  const todayReads = days.get(today) ?? 0;
-
-  // Current streak: consecutive days ending today (or yesterday, if today isn't done yet).
-  const d = new Date();
-  if (!days.has(today)) d.setDate(d.getDate() - 1);
-  let streak = 0;
-  while (days.has(localDay(d))) {
-    streak++;
-    d.setDate(d.getDate() - 1);
-  }
-
-  let bestStreak = 0;
-  let run = 0;
-  let prev: Date | null = null;
-  for (const r of dayRows) {
-    const cur = new Date(`${r.day}T12:00:00`);
-    if (prev && Math.round((cur.getTime() - prev.getTime()) / 86400000) === 1) run++;
-    else run = 1;
-    bestStreak = Math.max(bestStreak, run);
-    prev = cur;
-  }
+  const todayReads = days.get(localDay()) ?? 0;
+  const s = computeStreak(days);
 
   const lastRead = await db.getFirstAsync<{ book: number; ch: number; read_at: string }>(
     'SELECT book, ch, read_at FROM chapter_reads ORDER BY read_at DESC LIMIT 1'
   );
-  return { totalReads, todayReads, streak, bestStreak, days, lastRead: lastRead ?? null };
+  return {
+    totalReads,
+    todayReads,
+    streak: s.streak,
+    bestStreak: s.best,
+    graceDays: s.grace,
+    graceUsed: s.graceUsed,
+    days,
+    lastRead: lastRead ?? null,
+  };
 }
 
 /* ------------------------------ highlights ------------------------------ */

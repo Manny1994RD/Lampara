@@ -39,6 +39,7 @@ import {
   type Verse,
   type VerseRef,
 } from '@/lib/data';
+import { getActivePlanProgress } from '@/lib/plans';
 import { buildSegments } from '@/lib/segments';
 import { updateSettings, useSettings } from '@/lib/settings';
 
@@ -59,6 +60,16 @@ export default function ReadScreen() {
   const notes = useLive(async (d) => new Map((await getChapterNotes(d, book, chapter)).map((n) => [n.v, n.body])), [book, chapter], ['notes']);
   const topicDots = useLive(async (d) => new Map((await getChapterTopicVerses(d, book, chapter)).map((r) => [r.v, r.color])), [book, chapter], ['topics']);
   const readInfo = useLive((d) => getChapterReadCount(d, book, chapter), [book, chapter], ['reads']);
+  // Next unread chapter in the active reading plan (shown after marking this one read).
+  const planNext = useLive(
+    async (d) => {
+      const plan = (await getActivePlanProgress(d))[0];
+      const c = plan?.nextDay?.chapters.find((x) => !x.done);
+      return plan && c ? { name: plan.plan.name, ...c } : null;
+    },
+    [],
+    ['plans', 'reads']
+  );
 
   // Selection is tied to the chapter it was made in, so it clears automatically when the chapter changes.
   const chapterKey = `${tr}:${book}:${chapter}`;
@@ -253,6 +264,14 @@ export default function ReadScreen() {
                   await markChapterRead(db, book, chapter, tr);
                 }}
               />
+              {!!readInfo?.count && planNext && !(planNext.book === book && planNext.ch === chapter) && (
+                <Button
+                  kind="secondary"
+                  icon="arrow-forward"
+                  title={`${es ? 'Siguiente en tu plan' : 'Next in your plan'}: ${bookName(planNext.book, lang)} ${planNext.ch}`}
+                  onPress={() => go(planNext.book, planNext.ch)}
+                />
+              )}
             </Card>
           )}
 

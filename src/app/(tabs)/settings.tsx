@@ -1,11 +1,12 @@
 import { useSQLiteContext } from 'expo-sqlite';
-import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { ImportButton } from '@/components/import-button';
 import { Card, Chip, IconButton, Ionicons, Row, Screen, SectionTitle, Txt } from '@/components/ui';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
 import { deleteTranslation } from '@/lib/importer';
+import { ensureNotificationPermission, notificationsSupported } from '@/lib/notifications';
 import { updateSettings, useSettings } from '@/lib/settings';
 
 function confirm(title: string, msg: string): Promise<boolean> {
@@ -71,6 +72,40 @@ export default function SettingsScreen() {
         </Txt>
       </Card>
 
+      <SectionTitle>Notifications</SectionTitle>
+      {notificationsSupported ? (
+        <Card style={{ gap: 14 }}>
+          <NotifRow
+            title="Verse of the day"
+            subtitle="A verse from your Bible every morning."
+            enabled={settings.votdEnabled}
+            hour={settings.votdHour}
+            minute={settings.votdMinute}
+            onToggle={async (on) => {
+              if (on && !(await ensureNotificationPermission())) return;
+              updateSettings({ votdEnabled: on });
+            }}
+            onTime={(h, m) => updateSettings({ votdHour: h, votdMinute: m })}
+          />
+          <NotifRow
+            title="Reading reminder"
+            subtitle="Only if you haven't read yet that day."
+            enabled={settings.reminderEnabled}
+            hour={settings.reminderHour}
+            minute={settings.reminderMinute}
+            onToggle={async (on) => {
+              if (on && !(await ensureNotificationPermission())) return;
+              updateSettings({ reminderEnabled: on });
+            }}
+            onTime={(h, m) => updateSettings({ reminderHour: h, reminderMinute: m })}
+          />
+        </Card>
+      ) : (
+        <Txt muted variant="small">
+          Notifications are available in the Android and iPhone app.
+        </Txt>
+      )}
+
       <SectionTitle>Book names</SectionTitle>
       <Row style={{ flexWrap: 'wrap' }}>
         <Chip label="Match translation" selected={settings.bookNames === 'auto'} onPress={() => updateSettings({ bookNames: 'auto' })} />
@@ -87,15 +122,62 @@ export default function SettingsScreen() {
 
       <SectionTitle>About</SectionTitle>
       <Card style={{ gap: 6 }}>
-        <Txt variant="label">Lámpara 0.1 · Phase 1</Txt>
+        <Txt variant="label">Lámpara 0.2 · Phase 2</Txt>
         <Txt variant="small" muted>
           “Lámpara es a mis pies tu palabra, y lumbrera a mi camino.” — Salmo 119:105
         </Txt>
         <Txt variant="small" muted>
-          Coming next: reading plans, badges, verse of the day, tablet book mode, friend challenges and focus lock.
+          Coming next: tablet book mode, friend challenges and focus lock.
         </Txt>
       </Card>
     </Screen>
+  );
+}
+
+const TIMES = [6, 7, 8, 9, 12, 18, 20, 21, 22];
+
+function NotifRow({
+  title,
+  subtitle,
+  enabled,
+  hour,
+  minute,
+  onToggle,
+  onTime,
+}: {
+  title: string;
+  subtitle: string;
+  enabled: boolean;
+  hour: number;
+  minute: number;
+  onToggle: (on: boolean) => void;
+  onTime: (h: number, m: number) => void;
+}) {
+  const fmt = (h: number, m: number) => `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+  return (
+    <View style={{ gap: 8 }}>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <View style={{ flex: 1 }}>
+          <Txt variant="label">{title}</Txt>
+          <Txt variant="small" muted>
+            {subtitle}
+          </Txt>
+        </View>
+        <Switch value={enabled} onValueChange={onToggle} />
+      </Row>
+      {enabled && (
+        <Row style={{ flexWrap: 'wrap' }} gap={6}>
+          {TIMES.map((h) => (
+            <Chip key={h} label={fmt(h, 0)} selected={hour === h && minute === 0} onPress={() => onTime(h, 0)} />
+          ))}
+        </Row>
+      )}
+      {enabled && !TIMES.includes(hour) && (
+        <Txt variant="caption" muted>
+          {fmt(hour, minute)}
+        </Txt>
+      )}
+    </View>
   );
 }
 

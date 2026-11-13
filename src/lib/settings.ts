@@ -9,6 +9,16 @@ export type Settings = {
   chapter: number;
   /** 'auto' = use the language of the current translation. */
   bookNames: 'auto' | 'en' | 'es';
+  /** Badge ids the user has already been shown (to celebrate new ones once). */
+  seenBadges: string[];
+  /** Daily verse-of-the-day notification. */
+  votdEnabled: boolean;
+  votdHour: number;
+  votdMinute: number;
+  /** Daily reading reminder (only sent if you haven't read yet that day). */
+  reminderEnabled: boolean;
+  reminderHour: number;
+  reminderMinute: number;
 };
 
 const DEFAULTS: Settings = {
@@ -17,6 +27,13 @@ const DEFAULTS: Settings = {
   book: 43,
   chapter: 1,
   bookNames: 'auto',
+  seenBadges: [],
+  votdEnabled: false,
+  votdHour: 7,
+  votdMinute: 0,
+  reminderEnabled: false,
+  reminderHour: 20,
+  reminderMinute: 0,
 };
 
 const KEY = 'settings.v1';

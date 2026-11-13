@@ -5,7 +5,16 @@ import { useTheme } from '@/hooks/use-theme';
 import { localDay } from '@/lib/db';
 
 /** GitHub-style calendar of reading days (last N weeks). */
-export function ReadingHeatmap({ days, weeks = 18 }: { days: Map<string, number>; weeks?: number }) {
+export function ReadingHeatmap({
+  days,
+  weeks = 18,
+  grace,
+}: {
+  days: Map<string, number>;
+  weeks?: number;
+  /** Missed days covered by a grace day (drawn with an outline). */
+  grace?: Set<string>;
+}) {
   const t = useTheme();
   const today = new Date();
   const start = new Date(today);
@@ -38,7 +47,11 @@ export function ReadingHeatmap({ days, weeks = 18 }: { days: Map<string, number>
               <View
                 key={c.day}
                 accessibilityLabel={`${c.day}: ${c.count} chapters`}
-                style={[styles.cell, { backgroundColor: c.future ? 'transparent' : shade(c.count) }]}
+                style={[
+                  styles.cell,
+                  { backgroundColor: c.future ? 'transparent' : shade(c.count) },
+                  grace?.has(c.day) && { borderWidth: 2, borderColor: t.accent },
+                ]}
               />
             ))}
           </View>

@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DB_NAME = 'lampara.db';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 /** Runs once when the database opens. Creates / upgrades tables. */
 export async function migrateDb(db: SQLiteDatabase) {
@@ -99,6 +99,24 @@ export async function migrateDb(db: SQLiteDatabase) {
     `);
   }
 
+  if (current < 2) {
+    await db.execAsync(`
+      -- Reading plans. A chapter counts as done when it was marked read on/after the plan's start.
+      CREATE TABLE IF NOT EXISTS plans (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        books TEXT,                 -- JSON array of book numbers (custom plans)
+        days INTEGER NOT NULL,
+        start_day TEXT NOT NULL,    -- YYYY-MM-DD
+        started_at TEXT NOT NULL,   -- ISO timestamp
+        status TEXT NOT NULL DEFAULT 'active',  -- active | done | archived
+        completed_at TEXT,
+        created_at TEXT NOT NULL
+      );
+    `);
+  }
+
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 
@@ -106,7 +124,7 @@ export async function migrateDb(db: SQLiteDatabase) {
 /* Change notifications: screens re-query when data they use changes. */
 /* ------------------------------------------------------------------ */
 
-export type Topic = 'translations' | 'reads' | 'highlights' | 'bookmarks' | 'notes' | 'topics';
+export type Topic = 'translations' | 'reads' | 'highlights' | 'bookmarks' | 'notes' | 'topics' | 'plans';
 type Listener = (t: Topic) => void;
 const listeners = new Set<Listener>();
 
