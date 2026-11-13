@@ -8,7 +8,7 @@
     "scheme": "lampara",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.eralis.lampara",
       "infoPlist": {}
@@ -16,7 +16,7 @@
     "android": {
       "package": "com.eralis.lampara",
       "adaptiveIcon": {
-        "backgroundColor": "#FBF7F0",
+        "backgroundColor": "#16100B",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -40,9 +40,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FBF7F0",
+          "backgroundColor": "#16100B",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 220
         }
       ],
       "expo-sqlite",

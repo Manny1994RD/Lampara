@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ImportButton } from '@/components/import-button';
 import { ChapterPicker } from '@/components/reader/chapter-picker';
 import { BookView } from '@/components/reader/book-view';
+import { ListenBar } from '@/components/reader/listen-bar';
 import { VerseText } from '@/components/reader/verse-text';
 import { NoteSheet, TopicSheet, WordHighlightSheet } from '@/components/reader/verse-sheets';
 import {
@@ -38,6 +39,7 @@ import { PAPERS, PAPER_KEYS } from '@/constants/paper';
 import { Fonts, ReaderMaxWidth } from '@/constants/theme';
 import { bookName, getBook, refLabel } from '@/data/books';
 import { useLive } from '@/hooks/use-live';
+import { narrator, useReadAloud } from '@/hooks/use-read-aloud';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
 import { useT, type TKey } from '@/i18n';
@@ -116,6 +118,22 @@ export default function ReadScreen() {
     else if (book < 66) go(book + 1, 1);
   };
 
+  // Read aloud with the device's voice; keeps going into the next chapter.
+  const speechLang = current?.lang ?? 'en';
+  const listen = useReadAloud({
+    verses,
+    book,
+    chapter,
+    lang: speechLang,
+    rate: settings.ttsRate,
+    voice: settings.ttsVoices[speechLang],
+    onChapterEnd: () => {
+      if (book === 66 && chapter === 22) return false;
+      next();
+      return true;
+    },
+  });
+
   const selRefs: VerseRef[] = selected.map((v) => ({ book, ch: chapter, v }));
   const toggle = (v: number) => setSelected((s) => (s.includes(v) ? s.filter((x) => x !== v) : [...s, v].sort((a, b) => a - b)));
 
@@ -178,6 +196,7 @@ export default function ReadScreen() {
       fontSize={fontSize}
       colors={pc}
       selected={selected.includes(v.v)}
+      speaking={listen.open && listen.verse === v.v}
       verseColor={verseHl(v.v)}
       wordHighlights={wordHls(v.v)}
       bookmarked={bookmarks?.has(v.v)}
@@ -210,6 +229,12 @@ export default function ReadScreen() {
             </Txt>
           </Pressable>
           <View style={{ flex: 1 }} />
+          <IconButton
+            icon={listen.open ? 'headset' : 'headset-outline'}
+            active={listen.open}
+            label={L('read.listen')}
+            onPress={() => (listen.open ? narrator.close() : narrator.start())}
+          />
           <IconButton icon="search" label={L('read.search')} onPress={() => router.push('/search')} />
           <IconButton icon={bookMode ? 'book-outline' : 'text'} label={L('read.display')} onPress={() => setFontSheet(true)} />
         </View>
@@ -320,6 +345,10 @@ export default function ReadScreen() {
       </PaperBackground>
       )}
 
+      {listen.open && (
+        <ListenBar label={`${bookName(book, lang)} ${chapter}`} playing={listen.playing} verse={listen.verse} lang={speechLang} bottomInset={0} />
+      )}
+
       {/* Verse action bar */}
       {selected.length > 0 && (
         <View style={[styles.actionBar, { backgroundColor: t.card, borderColor: t.border, paddingBottom: 12 }]}>
@@ -337,6 +366,16 @@ export default function ReadScreen() {
               }}
             />
             <Row style={{ flexWrap: 'wrap' }} gap={6}>
+              <Button
+                small
+                kind="secondary"
+                icon="play"
+                title={L('read.listenFrom')}
+                onPress={() => {
+                  narrator.start(selected[0]);
+                  setSelected([]);
+                }}
+              />
               {selected.length === 1 && tr && (
                 <Button small kind="secondary" icon="color-wand" title={L('read.words')} onPress={() => setWordVerse(verses?.find((v) => v.v === selected[0]) ?? null)} />
               )}

@@ -16,6 +16,7 @@ export function VerseText({
   fontSize,
   colors,
   selected,
+  speaking,
   verseColor,
   wordHighlights,
   bookmarked,
@@ -28,6 +29,8 @@ export function VerseText({
   fontSize: number;
   colors: VerseColors;
   selected: boolean;
+  /** Being read aloud right now. */
+  speaking?: boolean;
   verseColor: HighlightColor | null;
   wordHighlights: Highlight[];
   bookmarked?: boolean;
@@ -41,7 +44,10 @@ export function VerseText({
     <Text
       onPress={onPress}
       suppressHighlighting
-      style={selected && { textDecorationLine: 'underline', textDecorationStyle: 'dotted', textDecorationColor: colors.accent }}>
+      style={[
+        selected && { textDecorationLine: 'underline', textDecorationStyle: 'dotted', textDecorationColor: colors.accent },
+        speaking && { backgroundColor: colors.dark ? 'rgba(255,138,61,0.22)' : 'rgba(232,89,12,0.13)' },
+      ]}>
       <Text style={[styles.verseNum, { color: colors.accent, fontSize: fontSize * 0.62 }]}>
         {leadingSpace ? ' ' : ''}
         {verse.v}

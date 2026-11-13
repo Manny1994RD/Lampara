@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { ReadingHeatmap } from '@/components/heatmap';
 import { ImportButton } from '@/components/import-button';
@@ -21,6 +21,8 @@ export default function TodayScreen() {
   const t = useTheme();
   const { t: tr, tn, date } = useT();
   const tablet = useIsTablet();
+  // Wide tablets and landscape: two columns instead of one long, stretched column.
+  const wide = useWindowDimensions().width >= 1100;
   const settings = useSettings();
   const { list, current, lang } = useTranslations();
   const stats = useLive((db) => getReadingStats(db), [], ['reads']);
@@ -62,8 +64,8 @@ export default function TodayScreen() {
     { icon: 'trophy-outline' as const, value: stats?.bestStreak ?? 0, label: tr('today.bestStreak') },
   ];
 
-  return (
-    <Screen>
+  const head = (
+    <>
       <Txt muted variant="small" style={{ textTransform: 'capitalize' }}>
         {date(new Date(), { weekday: 'long', month: 'long', day: 'numeric' })}
       </Txt>
@@ -103,7 +105,11 @@ export default function TodayScreen() {
           </Row>
         </Card>
       )}
+    </>
+  );
 
+  const main = (
+    <>
       {/* Verse of the day */}
       {votd && votd.text ? (
         <Pressable onPress={() => openChapter(votd.book, votd.ch)} style={({ pressed }) => [styles.votd, { backgroundColor: t.ink, opacity: pressed ? 0.9 : 1 }]}>
@@ -174,10 +180,22 @@ export default function TodayScreen() {
         </Card>
       )}
 
+      <View style={{ gap: 8, marginTop: 14 }}>
+        <Button icon="share-social-outline" title={tr('today.shareResults')} onPress={() => router.push('/results')} />
+        <Row>
+          <Button kind="secondary" icon="calendar-outline" title={tr('today.plans')} onPress={() => router.push('/plans')} style={{ flex: 1 }} />
+          <Button kind="secondary" icon="ribbon-outline" title={`${tr('today.badges')} · ${earnedCount}`} onPress={() => router.push('/badges')} style={{ flex: 1 }} />
+        </Row>
+      </View>
+    </>
+  );
+
+  const side = (
+    <>
       {/* Stats */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: wide ? 18 : 12 }}>
         {statTiles.map((s) => (
-          <Card key={s.label} style={{ flexGrow: 1, flexBasis: tablet ? '22%' : '45%', gap: 2 }}>
+          <Card key={s.label} style={{ flexGrow: 1, flexBasis: tablet && !wide ? '22%' : '45%', gap: 2 }}>
             <Ionicons name={s.icon} size={20} color={s.accent ? t.accent : t.text} />
             <Txt variant="title" style={{ fontSize: 28, marginTop: 4 }}>
               {s.value}
@@ -191,14 +209,6 @@ export default function TodayScreen() {
       <Txt variant="caption" muted style={{ marginTop: 8 }}>
         {tr('today.graceExplain', { n: GRACE_EVERY })}
       </Txt>
-
-      <View style={{ gap: 8, marginTop: 14 }}>
-        <Button icon="share-social-outline" title={tr('today.shareResults')} onPress={() => router.push('/results')} />
-        <Row>
-          <Button kind="secondary" icon="calendar-outline" title={tr('today.plans')} onPress={() => router.push('/plans')} style={{ flex: 1 }} />
-          <Button kind="secondary" icon="ribbon-outline" title={`${tr('today.badges')} · ${earnedCount}`} onPress={() => router.push('/badges')} style={{ flex: 1 }} />
-        </Row>
-      </View>
 
       <SectionTitle>{tr('common.wholeBible')}</SectionTitle>
       <Card style={{ gap: 10 }}>
@@ -219,8 +229,25 @@ export default function TodayScreen() {
 
       <SectionTitle>{tr('today.readingDays')}</SectionTitle>
       <Card>
-        <ReadingHeatmap days={stats?.days ?? new Map()} grace={stats?.graceUsed} weeks={tablet ? 30 : 18} />
+        <ReadingHeatmap days={stats?.days ?? new Map()} grace={stats?.graceUsed} weeks={tablet && !wide ? 30 : 18} />
       </Card>
+    </>
+  );
+
+  return (
+    <Screen maxWidth={wide ? 1180 : 900}>
+      {head}
+      {wide ? (
+        <View style={{ flexDirection: 'row', gap: 24, alignItems: 'flex-start' }}>
+          <View style={{ flex: 3 }}>{main}</View>
+          <View style={{ flex: 2 }}>{side}</View>
+        </View>
+      ) : (
+        <>
+          {main}
+          {side}
+        </>
+      )}
     </Screen>
   );
 }

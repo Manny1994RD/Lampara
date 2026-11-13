@@ -27,6 +27,10 @@ export type Settings = {
   reminderEnabled: boolean;
   reminderHour: number;
   reminderMinute: number;
+  /** Read-aloud speed (1 = normal). */
+  ttsRate: number;
+  /** Chosen read-aloud voice per Bible language (voice identifier); missing = the device default. */
+  ttsVoices: Partial<Record<'en' | 'es' | 'ko', string>>;
 };
 
 const DEFAULTS: Settings = {
@@ -46,6 +50,8 @@ const DEFAULTS: Settings = {
   reminderEnabled: false,
   reminderHour: 20,
   reminderMinute: 0,
+  ttsRate: 1,
+  ttsVoices: {},
 };
 
 const KEY = 'settings.v1';

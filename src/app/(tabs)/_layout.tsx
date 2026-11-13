@@ -96,6 +96,8 @@ const styles = StyleSheet.create({
   rail: {
     width: 210,
     flexDirection: 'column',
+    // TabList spreads items over the full height by default; keep them together at the top.
+    justifyContent: 'flex-start',
     borderRightWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
     gap: 4,
