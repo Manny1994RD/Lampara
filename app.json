@@ -10,7 +10,8 @@
     "ios": {
       "icon": "./assets/expo.icon",
       "supportsTablet": true,
-      "bundleIdentifier": "com.eralis.lampara"
+      "bundleIdentifier": "com.eralis.lampara",
+      "infoPlist": {}
     },
     "android": {
       "package": "com.eralis.lampara",
@@ -66,6 +67,21 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {
+        "headers": {
+          "Cross-Origin-Embedder-Policy": "credentialless",
+          "Cross-Origin-Opener-Policy": "same-origin"
+        },
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "1390b48f-da42-4e76-b53f-5586ce356712"
+      }
+    },
+    "owner": "mannylite"
   }
 }
