@@ -32,7 +32,7 @@ export function VerseListItem({
   return (
     <Card
       onPress={() => {
-        updateSettings({ book, chapter: ch });
+        updateSettings({ book, chapter: ch, verse: v > 1 ? v : null });
         router.navigate('/read');
       }}
       style={{ gap: 6 }}>

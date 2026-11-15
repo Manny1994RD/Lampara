@@ -43,6 +43,10 @@ type Props = {
   onNextChapter: () => void;
   /** Verse being read aloud: the book turns to its page. */
   followVerse?: number | null;
+  /** Open on the page that has this verse (where you stopped reading last time). */
+  startVerse?: number | null;
+  /** Called with the first verse of the page on screen, after each page turn. */
+  onPageVerse?: (v: number) => void;
   /** Shown under the book (e.g. "mark as read"). */
   bottomBar?: ReactNode;
 };
@@ -117,8 +121,15 @@ export function BookView(props: Props) {
 
   const [pos, setPos] = useState<{ key: string; unit: number }>({ key: '', unit: 0 });
   const posKey = `${chapterKey}|${spread}`;
+  // The page holding the verse where you stopped (when the chapter opens).
+  const startPage = props.startVerse != null ? pageList.findIndex((pg) => pg.some((i) => verses[i].v === props.startVerse)) : -1;
+  const startUnit = startPage < 0 ? 0 : spread ? Math.floor(startPage / 2) : startPage;
   const unit =
-    pos.key === posKey ? Math.min(pos.unit, Math.max(0, unitCount - 1)) : props.startAtEnd ? Math.max(0, unitCount - 1) : 0;
+    pos.key === posKey
+      ? Math.min(pos.unit, Math.max(0, unitCount - 1))
+      : props.startAtEnd
+        ? Math.max(0, unitCount - 1)
+        : startUnit;
   const setUnit = (u: number) => setPos({ key: posKey, unit: u });
 
   // Follow the verse being read aloud (adjusted while rendering, when it changes).
@@ -131,6 +142,14 @@ export function BookView(props: Props) {
     const u = pi < 0 ? unit : spread ? Math.floor(pi / 2) : pi;
     if (u !== unit) setPos({ key: posKey, unit: u });
   }
+
+  // Report where you are (first verse of the page on screen) so it can be saved.
+  const firstIndex = ready ? pageList[spread ? unit * 2 : unit]?.[0] : undefined;
+  const firstVerse = firstIndex != null ? verses[firstIndex]?.v : undefined;
+  const onPageVerse = props.onPageVerse;
+  useEffect(() => {
+    if (firstVerse != null) onPageVerse?.(firstVerse);
+  }, [firstVerse, onPageVerse]);
 
   /* ------------------------------- turning -------------------------------- */
 

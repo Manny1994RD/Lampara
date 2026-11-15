@@ -120,12 +120,14 @@ export async function markChapterRead(db: SQLiteDatabase, book: number, ch: numb
   notify('reads');
 }
 
+/** Undo in the reader: removes the latest dated reading of the chapter (history marks are left alone). */
 export async function undoLastRead(db: SQLiteDatabase, book: number, ch: number) {
   await db.runAsync(
     `DELETE FROM chapter_reads WHERE id = (
-       SELECT id FROM chapter_reads WHERE book = ? AND ch = ? ORDER BY read_at DESC LIMIT 1)`,
+       SELECT id FROM chapter_reads WHERE book = ? AND ch = ? AND day != ? ORDER BY read_at DESC LIMIT 1)`,
     book,
-    ch
+    ch,
+    EARLIER_DAY
   );
   notify('reads');
 }
@@ -194,13 +196,24 @@ export async function clearBookReads(db: SQLiteDatabase, book: number) {
   notify('reads');
 }
 
+/**
+ * For the reader: times read (history marks included), when it was last read in the app
+ * (history marks have no real date), and whether that was today.
+ */
 export async function getChapterReadCount(db: SQLiteDatabase, book: number, ch: number) {
-  const r = await db.getFirstAsync<{ c: number; last: string | null }>(
-    'SELECT COUNT(*) AS c, MAX(read_at) AS last FROM chapter_reads WHERE book = ? AND ch = ?',
+  const r = await db.getFirstAsync<{ c: number; last: string | null; lastDay: string | null; dated: number }>(
+    `SELECT COUNT(*) AS c,
+            MAX(CASE WHEN day != ? THEN read_at END) AS last,
+            MAX(CASE WHEN day != ? THEN day END) AS lastDay,
+            COALESCE(SUM(day != ?), 0) AS dated
+       FROM chapter_reads WHERE book = ? AND ch = ?`,
+    EARLIER_DAY,
+    EARLIER_DAY,
+    EARLIER_DAY,
     book,
     ch
   );
-  return { count: r?.c ?? 0, last: r?.last ?? null };
+  return { count: r?.c ?? 0, last: r?.last ?? null, today: r?.lastDay === localDay(), dated: r?.dated ?? 0 };
 }
 
 /** Map "book:ch" -> times read. */

@@ -19,7 +19,7 @@ import { getVotd } from '@/lib/votd';
 
 /**
  * Today: one clear path into reading.
- * Greeting → continue where you stopped → today's reading → verse of the day.
+ * Greeting → one main reading card (today's plan passage, or where you stopped) → verse of the day.
  * Streaks, badges and statistics live in Progress.
  */
 export default function TodayScreen() {
@@ -40,9 +40,10 @@ export default function TodayScreen() {
   const greeting = tr(hour < 12 ? 'greet.morning' : hour < 19 ? 'greet.afternoon' : 'greet.evening');
   const firstName = hub?.user.name?.trim().split(/\s+/)[0];
 
-  // Where the reader is now (the last chapter opened).
-  const resume = { book: settings.book, ch: settings.chapter };
-  // Next chapter after the last one marked read (used when there's no active plan).
+  // Where the reader is now (the last chapter opened, and the verse you'd scrolled to).
+  const resume = { book: settings.book, ch: settings.chapter, v: settings.verse };
+  const resumeLabel = refLabel(resume.book, resume.ch, resume.v ?? undefined, lang);
+  // Next chapter after the last one actually read (history marks from Progress don't count).
   const nextUp = (() => {
     const start = stats?.lastRead ?? { book: settings.book, ch: settings.chapter - 1 };
     let b = start.book;
@@ -53,10 +54,14 @@ export default function TodayScreen() {
     }
     return { book: b, ch: c };
   })();
-  const sameAsResume = nextUp.book === resume.book && nextUp.ch === resume.ch;
+  // Just finished the chapter the reader is on: offer the following one instead of the same one again.
+  const continueNext = !!stats?.lastRead && stats.lastRead.book === resume.book && stats.lastRead.ch === resume.ch;
 
   const plan = plans?.[0];
   const planDay = plan?.nextDay;
+  // First unread chapter in the plan, and whether today's part is already done (the next day is in the future).
+  const planNext = planDay?.chapters.find((c) => !c.done) ?? null;
+  const aheadOfPlan = !!plan && !!planDay && plan.todayIndex >= 0 && planDay.index > plan.todayIndex;
   const noBibles = list && list.length === 0;
 
   const shareVerse = () => {
@@ -97,37 +102,13 @@ export default function TodayScreen() {
         </Card>
       )}
 
-      {/* 1. Continue reading */}
-      {!noBibles && (
-        <Card style={{ marginTop: 18, gap: 6 }} onPress={() => router.navigate('/read')}>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <View style={{ flex: 1 }}>
-              <Txt variant="caption" muted style={styles.kicker}>
-                {tr('today.continue')}
-              </Txt>
-              <Txt variant="title" style={{ fontSize: 26 }}>
-                {refLabel(resume.book, resume.ch, undefined, lang)}
-              </Txt>
-              {current && (
-                <Txt variant="small" muted>
-                  {current.abbr}
-                </Txt>
-              )}
-            </View>
-            <View style={[styles.roundGo, { backgroundColor: t.ink }]}>
-              <Ionicons name="play" size={22} color={t.onInk} style={{ marginLeft: 3 }} />
-            </View>
-          </Row>
-        </Card>
-      )}
-
-      {/* 2. Today's reading */}
+      {/* 1. The one main reading action: today's plan passage, or where you stopped. */}
       {!noBibles &&
         (plan && planDay ? (
-          <Card style={{ marginTop: 12, gap: 12 }}>
+          <Card style={{ marginTop: 18, gap: 12 }}>
             <Row style={{ justifyContent: 'space-between' }}>
               <Txt variant="caption" muted style={[styles.kicker, { flex: 1 }]} numberOfLines={1}>
-                {tr('today.todaysReading')} · {plan.plan.name}
+                {aheadOfPlan ? `${tr('today.planDoneToday')} ✓` : tr('today.todaysReading')} · {plan.plan.name}
               </Txt>
               <Pressable onPress={() => router.push({ pathname: '/plan/[id]', params: { id: plan.plan.id } })} hitSlop={8}>
                 <Txt variant="small" style={{ fontWeight: '700' }}>
@@ -135,7 +116,7 @@ export default function TodayScreen() {
                 </Txt>
               </Pressable>
             </Row>
-            <Txt variant="title" style={{ fontSize: 22 }}>
+            <Txt variant="title" style={{ fontSize: 24 }}>
               {dayLabel(planDay, lang)}
             </Txt>
             <Row style={{ flexWrap: 'wrap' }} gap={6}>
@@ -143,6 +124,8 @@ export default function TodayScreen() {
                 <Pressable
                   key={`${c.book}:${c.ch}`}
                   onPress={() => openChapter(c.book, c.ch)}
+                  accessibilityRole="button"
+                  accessibilityState={{ checked: c.done }}
                   style={({ pressed }) => [styles.pill, { backgroundColor: c.done ? t.ink : t.background, opacity: pressed ? 0.7 : 1 }]}>
                   {c.done && <Ionicons name="checkmark" size={14} color={t.onInk} />}
                   <Txt variant="small" color={c.done ? t.onInk : t.text} style={{ fontWeight: '600' }}>
@@ -151,27 +134,53 @@ export default function TodayScreen() {
                 </Pressable>
               ))}
             </Row>
+            {planNext && (
+              <Button
+                kind={aheadOfPlan ? 'secondary' : 'primary'}
+                icon="book-outline"
+                title={tr(aheadOfPlan ? 'today.readAhead' : 'today.readButton', { ref: refLabel(planNext.book, planNext.ch, undefined, lang) })}
+                onPress={() => openChapter(planNext.book, planNext.ch)}
+              />
+            )}
             <ProgressBar value={plan.doneChapters / plan.totalChapters} height={6} />
             <Txt variant="small" muted>
               {tr('today.dayOf', { day: planDay.index + 1, total: plan.plan.days })} ·{' '}
               {plan.behind > 0 ? tn('today.behind', plan.behind) : `${tr('today.onTrack')} ✓`}
             </Txt>
-          </Card>
-        ) : (
-          <Card style={{ marginTop: 12, gap: 10 }}>
-            <Txt variant="caption" muted style={styles.kicker}>
-              {tr('today.todaysReading')}
-            </Txt>
-            {!sameAsResume && (
-              <Pressable onPress={() => openChapter(nextUp.book, nextUp.ch)}>
-                <Row style={{ justifyContent: 'space-between' }}>
-                  <Txt variant="heading">
-                    {tr('today.upNext')}: {refLabel(nextUp.book, nextUp.ch, undefined, lang)}
-                  </Txt>
-                  <Ionicons name="chevron-forward" size={20} color={t.textSecondary} />
-                </Row>
+            {/* The reader is somewhere else: offer to go back there too. */}
+            {!(planNext && planNext.book === resume.book && planNext.ch === resume.ch) && (
+              <Pressable
+                onPress={() => router.navigate('/read')}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.resumeRow, { borderColor: t.border, opacity: pressed ? 0.7 : 1 }]}>
+                <Ionicons name="bookmark-outline" size={16} color={t.textSecondary} />
+                <Txt variant="small" style={{ flex: 1 }}>
+                  {tr('today.orResume', { ref: resumeLabel })}
+                </Txt>
+                <Ionicons name="chevron-forward" size={16} color={t.textSecondary} />
               </Pressable>
             )}
+          </Card>
+        ) : (
+          <Card style={{ marginTop: 18, gap: 12 }}>
+            <Txt variant="caption" muted style={styles.kicker}>
+              {continueNext ? tr('today.upNext') : tr('today.continue')}
+            </Txt>
+            <View>
+              <Txt variant="title" style={{ fontSize: 26 }}>
+                {continueNext ? refLabel(nextUp.book, nextUp.ch, undefined, lang) : resumeLabel}
+              </Txt>
+              {current && (
+                <Txt variant="small" muted>
+                  {current.abbr}
+                </Txt>
+              )}
+            </View>
+            <Button
+              icon="book-outline"
+              title={continueNext ? tr('today.readButton', { ref: refLabel(nextUp.book, nextUp.ch, undefined, lang) }) : tr('today.continue')}
+              onPress={() => (continueNext ? openChapter(nextUp.book, nextUp.ch) : router.navigate('/read'))}
+            />
             <Txt variant="small" muted>
               {tr('today.noPlanHint')}
             </Txt>
@@ -244,7 +253,7 @@ const styles = StyleSheet.create({
   pill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
   votd: { marginTop: 12, borderRadius: 22, padding: 20, gap: 14 },
   votdText: { fontSize: 21, lineHeight: 32 },
-  roundGo: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
+  resumeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10 },
   inkButton: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   progressLine: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 12, marginTop: 12 },
 });

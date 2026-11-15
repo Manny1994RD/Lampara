@@ -9,7 +9,7 @@ import { BOOKS, TOTAL_CHAPTERS, bookName } from '@/data/books';
 import { useLive } from '@/hooks/use-live';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
-import { useT } from '@/i18n';
+import { useT, type TKey } from '@/i18n';
 import { clearBookReads, getAllReadCounts, getBookReadSummary, markChaptersReadEarlier, removeEarlierReads } from '@/lib/data';
 import { updateSettings } from '@/lib/settings';
 
@@ -92,7 +92,9 @@ ${body}`)
     <View style={{ flex: 1 }}>
     <Screen>
       <Row style={{ justifyContent: 'space-between' }}>
-        <Txt variant="title">{tr('tab.progress')}</Txt>
+        <Txt variant="title" style={{ flex: 1 }}>
+          {tr('tab.progress')}
+        </Txt>
         <Button
           small
           kind={marking ? 'primary' : 'secondary'}
@@ -101,23 +103,42 @@ ${body}`)
           onPress={() => (marking ? stopMarking() : setMarking(true))}
         />
       </Row>
-      {!marking && (
+      {marking ? (
+        // Editing reading history: an obvious, different-looking state.
+        <View style={[styles.editBanner, { backgroundColor: t.accentSoft, borderColor: t.accent }]}>
+          <Row>
+            <Ionicons name="create" size={20} color={t.accent} />
+            <Txt variant="label" style={{ flex: 1 }}>
+              {tr('progress.editingTitle')}
+            </Txt>
+          </Row>
+          <Txt variant="small">{tr('progress.markHint')}</Txt>
+        </View>
+      ) : (
         <View style={{ marginTop: 12 }}>
           <ReadingStats />
           <SectionTitle>{tr('progress.byBook')}</SectionTitle>
         </View>
       )}
-      <Txt muted style={{ marginBottom: 14 }}>
+      <Txt muted style={{ marginBottom: 6 }}>
         {tr('progress.readOnce', { done: total, total: TOTAL_CHAPTERS })}
       </Txt>
-      {marking && (
-        <Card style={{ marginBottom: 14, flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-          <Ionicons name="information-circle-outline" size={20} color={t.accent} />
-          <Txt variant="small" style={{ flex: 1 }}>
-            {tr('progress.markHint')}
-          </Txt>
-        </Card>
+      {!marking && (
+        <Txt variant="small" muted style={{ marginBottom: 10 }}>
+          {tr('progress.viewHint')}
+        </Txt>
       )}
+      {/* What the colors mean */}
+      <Row style={{ flexWrap: 'wrap', marginBottom: 14 }} gap={12}>
+        {[0, 1, 2, 3, 4].map((n) => (
+          <Row key={n} gap={5}>
+            <View style={[styles.legendCell, { backgroundColor: shade(n) }, !n && { borderWidth: 1, borderColor: t.border }]} />
+            <Txt variant="caption" muted>
+              {tr(`progress.legend${n}` as TKey)}
+            </Txt>
+          </Row>
+        ))}
+      </Row>
       <Row style={{ marginBottom: 14, flexWrap: 'wrap' }}>
         <Chip label={tr('common.all')} selected={testament === 'all'} onPress={() => setTestament('all')} />
         <Chip label={tr('common.oldTestament')} selected={testament === 'OT'} onPress={() => setTestament('OT')} />
@@ -181,6 +202,11 @@ ${body}`)
                             ×{n}
                           </Txt>
                         )}
+                        {isPicked && (
+                          <View style={[styles.check, { backgroundColor: t.text }]}>
+                            <Ionicons name="checkmark" size={10} color={t.background} />
+                          </View>
+                        )}
                       </Pressable>
                     );
                   })}
@@ -213,6 +239,9 @@ ${body}`)
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
   cell: { width: 40, height: 40, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  check: { position: 'absolute', top: -5, right: -5, width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  legendCell: { width: 14, height: 14, borderRadius: 4 },
+  editBanner: { marginTop: 12, marginBottom: 14, borderWidth: 1.5, borderRadius: 14, padding: 12, gap: 6 },
   bar: {
     position: 'absolute',
     left: 0,

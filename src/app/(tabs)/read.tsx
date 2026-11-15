@@ -64,7 +64,7 @@ import {
 import { DEFAULT_NATURAL, getVoiceStatus } from '@/lib/hub-voice';
 import { getHub } from '@/lib/hub';
 import { getActivePlanProgress } from '@/lib/plans';
-import { updateSettings, useSettings, type Settings } from '@/lib/settings';
+import { getSettings, updateSettings, useSettings, type Settings } from '@/lib/settings';
 
 export default function ReadScreen() {
   const db = useSQLiteContext();
@@ -123,9 +123,66 @@ export default function ReadScreen() {
   const [topicRefs, setTopicRefs] = useState<VerseRef[] | null>(null);
   const scrollRef = useRef<ScrollViewInstance>(null);
 
+  /* ---- Where you are inside the chapter (saved as you read, restored when it opens again) ---- */
+  // Top edge of each paragraph (or verse row) on the page, keyed by its first verse.
+  const blocks = useRef<{ key: string; list: Map<number, number> }>({ key: '', list: new Map() });
+  const restored = useRef<string | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedVerse = settings.verse;
+
   useEffect(() => {
-    scrollRef.current?.scrollTo({ y: 0, animated: false });
+    // A new chapter opens at its top, or at the verse where you stopped (restored once it's laid out).
+    if (getSettings().verse == null) {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      restored.current = chapterKey;
+    } else restored.current = null;
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
   }, [chapterKey]);
+
+  // If the saved verse never shows up (a shorter translation), stop waiting for it and save normally.
+  const versesReady = !!verses?.length;
+  useEffect(() => {
+    if (!versesReady) return;
+    const id = setTimeout(() => {
+      restored.current = chapterKey;
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [chapterKey, versesReady]);
+
+  /** Page view: remember the first verse of the page on screen. */
+  const onPageVerse = (v: number) => {
+    const verse = v > 1 ? v : null;
+    if (verse !== getSettings().verse) updateSettings({ verse });
+  };
+
+  /** Records where a paragraph is; scrolls to the saved verse once its paragraph is placed. */
+  const onBlockLayout = (firstVerse: number, lastVerse: number, y: number) => {
+    if (blocks.current.key !== chapterKey) blocks.current = { key: chapterKey, list: new Map() };
+    blocks.current.list.set(firstVerse, y);
+    const target = getSettings().verse;
+    if (restored.current !== chapterKey && target != null && target >= firstVerse && target <= lastVerse) {
+      restored.current = chapterKey;
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: false });
+    }
+  };
+
+  /** After scrolling stops: remember the first verse on screen. */
+  const onScrollPos = (y: number) => {
+    if (restored.current !== chapterKey) return; // still opening at the saved verse
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      if (blocks.current.key !== chapterKey) return;
+      let first: number | null = null;
+      for (const [v, top] of [...blocks.current.list.entries()].sort((a, b) => a[1] - b[1])) {
+        if (top <= y + 24) first = v;
+        else break;
+      }
+      const verse = first != null && first > 1 ? first : null;
+      if (verse !== getSettings().verse) updateSettings({ verse });
+    }, 500);
+  };
 
   const go = (b: number, c: number) => updateSettings({ book: b, chapter: c });
   const prev = () => {
@@ -276,6 +333,13 @@ export default function ReadScreen() {
   const bookMode = settings.readerMode === 'book';
 
   const markRead = () => markChapterRead(db, book, chapter, tr);
+  // Where "Next" goes after marking: the next unread chapter of your plan, otherwise the following chapter.
+  const planTarget = planNext && !(planNext.book === book && planNext.ch === chapter) ? planNext : null;
+  const seqNext = chapter < getBook(book).chapters ? { book, ch: chapter + 1 } : book < 66 ? { book: book + 1, ch: 1 } : null;
+  const nextTarget = planTarget ?? seqNext;
+  const nextLabel = nextTarget
+    ? L(planTarget ? 'read.nextInPlan' : 'read.nextChapter', { ref: refLabel(nextTarget.book, nextTarget.ch, undefined, lang) })
+    : '';
 
   return (
     <View style={[styles.flex, { backgroundColor: t.background }]}>
@@ -328,6 +392,8 @@ export default function ReadScreen() {
             startAtEnd={endKey === chapterKey}
             allowTwoPages={settings.twoPages}
             followVerse={listen.open ? listen.verse : null}
+            startVerse={savedVerse}
+            onPageVerse={onPageVerse}
             canPrevChapter={!!prevTarget}
             canNextChapter={!(book === 66 && chapter === 22)}
             onPrevChapter={() => {
@@ -337,25 +403,32 @@ export default function ReadScreen() {
             }}
             onNextChapter={next}
             bottomBar={
-              <Row gap={6}>
-                {!!readInfo?.count && planNext && !(planNext.book === book && planNext.ch === chapter) && (
-                  <Button small kind="ghost" icon="arrow-forward" title={`${bookName(planNext.book, lang)} ${planNext.ch}`} onPress={() => go(planNext.book, planNext.ch)} />
-                )}
-                {!!readInfo?.count && <IconButton icon="arrow-undo" size={18} label={L('read.undo')} color={pc.muted} onPress={() => undoLastRead(db, book, chapter)} />}
-                <Button
-                  small
-                  kind={readInfo?.count ? 'secondary' : 'primary'}
-                  icon="checkmark-done"
-                  title={readInfo?.count ? L('read.readShort', { n: readInfo.count }) : L('read.markShort')}
-                  onPress={markRead}
-                />
-              </Row>
+              readInfo?.today ? (
+                <Row gap={6}>
+                  <Ionicons name="checkmark-circle" size={20} color={t.success} accessibilityLabel={L('read.doneToday')} />
+                  <IconButton icon="arrow-undo" size={18} label={L('read.undo')} color={pc.muted} onPress={() => undoLastRead(db, book, chapter)} />
+                  {nextTarget && (
+                    <Button
+                      small
+                      iconRight="arrow-forward"
+                      title={refLabel(nextTarget.book, nextTarget.ch, undefined, lang)}
+                      onPress={() => go(nextTarget.book, nextTarget.ch)}
+                    />
+                  )}
+                </Row>
+              ) : (
+                <Button small icon="checkmark" title={L('read.markShort')} onPress={markRead} />
+              )
             }
           />
         </View>
       ) : (
       <PaperBackground texture={pc.texture} base={paper ? pc.base : t.background}>
-      <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: selected.length ? 220 : listen.open ? (settings.listenMini ? 90 : 170) : 60 }}>
+      <ScrollView
+        ref={scrollRef}
+        scrollEventThrottle={250}
+        onScroll={(e) => onScrollPos(e.nativeEvent.contentOffset.y)}
+        contentContainerStyle={{ paddingBottom: selected.length ? 220 : listen.open ? (settings.listenMini ? 90 : 170) : 60 }}>
         <View style={[styles.page, { maxWidth: pageMax, paddingHorizontal: tablet ? 40 : 20 }]}>
           <Text style={[styles.chapterTitle, { color: pc.text, fontFamily: Fonts.serif }]}>
             {bookName(book, lang)} {chapter}
@@ -392,12 +465,12 @@ export default function ReadScreen() {
                 const b = second2.get(v.v);
                 const style = { fontSize, lineHeight: fontSize * 1.6, color: pc.text, fontFamily: Fonts.serif };
                 return sideBySide ? (
-                  <View key={v.v} style={styles.pairRow}>
+                  <View key={v.v} style={styles.pairRow} onLayout={(e) => onBlockLayout(v.v, v.v, e.nativeEvent.layout.y)}>
                     <Text style={[style, { flex: 1 }]}>{renderVerse(v, false)}</Text>
                     <Text style={[style, { flex: 1 }]}>{b ? renderVerse2(b) : ''}</Text>
                   </View>
                 ) : (
-                  <View key={v.v} style={{ marginBottom: 12 }}>
+                  <View key={v.v} style={{ marginBottom: 12 }} onLayout={(e) => onBlockLayout(v.v, v.v, e.nativeEvent.layout.y)}>
                     <Text style={style}>{renderVerse(v, false)}</Text>
                     {b && (
                       <Text style={[style, { fontSize: fontSize * 0.88, lineHeight: fontSize * 1.45, color: pc.muted, marginTop: 2 }]}>
@@ -410,55 +483,51 @@ export default function ReadScreen() {
             </>
           ) : (
             paragraphs.map((para, pi) => (
-              <Text key={pi} style={[styles.paragraph, { fontSize, lineHeight: fontSize * 1.65, color: pc.text, fontFamily: Fonts.serif }]}>
+              <Text
+                key={pi}
+                onLayout={(e) => onBlockLayout(para[0].v, para[para.length - 1].v, e.nativeEvent.layout.y)}
+                style={[styles.paragraph, { fontSize, lineHeight: fontSize * 1.65, color: pc.text, fontFamily: Fonts.serif }]}>
                 {para.map((v) => renderVerse(v, true))}
               </Text>
             ))
           )}
 
-          {/* Mark as read */}
+          {/* Mark as read → then straight on to the next chapter */}
           {!!verses?.length && (
             <Card style={{ marginTop: 28, gap: 12 }}>
-              <Row style={{ justifyContent: 'space-between' }}>
-                <View style={{ flex: 1 }}>
-                  <Txt variant="label">
-                    {readInfo?.count ? tn('read.readTimes', readInfo.count) : L('read.notMarked')}
-                  </Txt>
-                  {readInfo?.last && (
-                    <Txt variant="small" muted>
-                      {L('read.last', { date: date(readInfo.last) })}
+              {readInfo?.today ? (
+                <>
+                  <Row>
+                    <Ionicons name="checkmark-circle" size={24} color={t.success} />
+                    <Txt variant="label" style={{ flex: 1 }}>
+                      {L('read.doneToday')}
+                      {readInfo.count > 1 ? ` · ${tn('read.readTimes', readInfo.count)}` : ''}
                     </Txt>
+                  </Row>
+                  {nextTarget && (
+                    <Button iconRight="arrow-forward" title={nextLabel} onPress={() => go(nextTarget.book, nextTarget.ch)} />
                   )}
-                </View>
-                {!!readInfo?.count && (
-                  <IconButton icon="arrow-undo" label={L('read.undo')} onPress={() => undoLastRead(db, book, chapter)} />
-                )}
-              </Row>
-              <Button
-                icon="checkmark-done"
-                title={
-                  readInfo?.count
-                    ? L('read.readAgain')
-                    : L('read.markRead')
-                }
-                onPress={async () => {
-                  await markChapterRead(db, book, chapter, tr);
-                }}
-              />
-              {!!readInfo?.count && planNext && !(planNext.book === book && planNext.ch === chapter) && (
-                <Button
-                  kind="secondary"
-                  icon="arrow-forward"
-                  title={L('read.nextInPlan', { ref: refLabel(planNext.book, planNext.ch, undefined, lang) })}
-                  onPress={() => go(planNext.book, planNext.ch)}
-                />
+                  <Row style={{ flexWrap: 'wrap' }} gap={6}>
+                    <Button small kind="ghost" icon="arrow-undo" title={L('read.undoShort')} onPress={() => undoLastRead(db, book, chapter)} />
+                    <Button small kind="ghost" icon="add" title={L('read.readAgainShort')} onPress={markRead} />
+                  </Row>
+                </>
+              ) : (
+                <>
+                  <Button icon="checkmark" title={L('read.markRead')} onPress={markRead} />
+                  <Txt variant="small" muted>
+                    {readInfo?.count
+                      ? `${tn('read.readTimes', readInfo.count)}${readInfo.last ? ` · ${L('read.last', { date: date(readInfo.last) })}` : ''}`
+                      : L('read.markHint')}
+                  </Txt>
+                </>
               )}
             </Card>
           )}
 
           <Row style={{ justifyContent: 'space-between', marginTop: 18 }}>
             <Button kind="ghost" icon="chevron-back" title={L('read.previous')} onPress={prev} disabled={book === 1 && chapter === 1} />
-            <Button kind="ghost" title={L('read.next')} onPress={next} disabled={book === 66 && chapter === 22} />
+            <Button kind="ghost" iconRight="chevron-forward" title={L('read.next')} onPress={next} disabled={book === 66 && chapter === 22} />
           </Row>
         </View>
       </ScrollView>

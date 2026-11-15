@@ -7,6 +7,8 @@ export type Settings = {
   fontSize: number;
   book: number;
   chapter: number;
+  /** Where you were inside the chapter (first verse on screen); null = the top of the chapter. */
+  verse: number | null;
   /** Language of the app's menus and buttons ('auto' = the phone's language). */
   appLanguage: 'auto' | 'en' | 'es' | 'ko';
   /** 'auto' = use the language of the current translation. */
@@ -58,6 +60,7 @@ const DEFAULTS: Settings = {
   fontSize: 19,
   book: 43,
   chapter: 1,
+  verse: null,
   appLanguage: 'auto',
   bookNames: 'auto',
   readerMode: 'scroll',
@@ -122,6 +125,10 @@ export function getSettings() {
 }
 
 export function updateSettings(patch: Partial<Settings>) {
+  // Opening another chapter starts at its top, unless a verse to open at is given.
+  const movesChapter =
+    (patch.book !== undefined && patch.book !== state.book) || (patch.chapter !== undefined && patch.chapter !== state.chapter);
+  if (movesChapter && patch.verse === undefined) patch = { ...patch, verse: null };
   state = { ...state, ...patch };
   try {
     store.set(JSON.stringify(state));

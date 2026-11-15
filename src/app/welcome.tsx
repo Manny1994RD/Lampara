@@ -33,6 +33,9 @@ export default function WelcomeScreen() {
     return 'lang';
   });
 
+  // Account step: chose "I have an invitation or an account" (shows the form).
+  const [withAccount, setWithAccount] = useState(false);
+
   const finish = () => {
     updateSettings({ onboarded: true });
     router.replace('/read');
@@ -73,17 +76,28 @@ export default function WelcomeScreen() {
           <Txt variant="heading" style={{ marginTop: 18 }}>
             {tr('welcome.accountTitle')}
           </Txt>
-          <Txt muted style={{ marginTop: 4, marginBottom: 14 }}>
-            {tr('welcome.accountBody')}
-          </Txt>
-          <AccountForm initialMode="join" initialCode={params.code ? String(params.code) : ''} onDone={() => setStep('bible')} />
-          <Button
-            kind="ghost"
-            small
-            title={tr('welcome.noAccount')}
-            onPress={() => setStep('bible')}
-            style={{ marginTop: 12, alignSelf: 'center' }}
-          />
+          {/* An invitation link goes straight to the form; otherwise choose first. */}
+          {withAccount || params.code ? (
+            <>
+              <Txt muted style={{ marginTop: 4, marginBottom: 14 }}>
+                {tr('welcome.accountBody')}
+              </Txt>
+              <AccountForm initialMode="join" initialCode={params.code ? String(params.code) : ''} onDone={() => setStep('bible')} />
+              <Button
+                kind="ghost"
+                small
+                icon="chevron-back"
+                title={tr('common.back')}
+                onPress={() => setWithAccount(false)}
+                style={{ marginTop: 12, alignSelf: 'center' }}
+              />
+            </>
+          ) : (
+            <View style={{ gap: 10, marginTop: 14 }}>
+              <BigButton label={tr('welcome.withAccount')} sub={tr('welcome.withAccountHint')} onPress={() => setWithAccount(true)} />
+              <BigButton label={tr('welcome.noAccount')} sub={tr('welcome.noAccountHint')} onPress={() => setStep('bible')} />
+            </View>
+          )}
         </>
       )}
 
@@ -95,13 +109,19 @@ export default function WelcomeScreen() {
 function Steps({ step }: { step: Step }) {
   const t = useTheme();
   const order: Step[] = ['lang', 'account', 'bible'];
+  const { t: tr } = useT();
   const at = order.indexOf(step);
   return (
-    <Row gap={6} style={{ marginTop: 4 }}>
-      {order.map((s, i) => (
-        <View key={s} style={[styles.dot, { backgroundColor: i <= at ? t.accent : t.border, flex: 1 }]} />
-      ))}
-    </Row>
+    <View style={{ gap: 6, marginTop: 4 }}>
+      <Row gap={6}>
+        {order.map((s, i) => (
+          <View key={s} style={[styles.dot, { backgroundColor: i <= at ? t.accent : t.border, flex: 1 }]} />
+        ))}
+      </Row>
+      <Txt variant="caption" muted>
+        {tr('welcome.stepOf', { n: at + 1, total: order.length })}
+      </Txt>
+    </View>
   );
 }
 
@@ -137,7 +157,8 @@ function ChooseBible({ onDone }: { onDone: () => void }) {
   const sorted = [...(list ?? [])].sort((a, b) =>
     a.lang === b.lang ? a.abbr.localeCompare(b.abbr) : a.lang === appLang ? -1 : b.lang === appLang ? 1 : a.lang.localeCompare(b.lang)
   );
-  const chosen = sorted.find((x) => x.id === picked) ?? null;
+  // With just one Bible there's nothing to choose: it's the one.
+  const chosen = sorted.find((x) => x.id === picked) ?? (sorted.length === 1 ? sorted[0] : null);
 
   return (
     <>
@@ -155,9 +176,14 @@ function ChooseBible({ onDone }: { onDone: () => void }) {
       )}
       <View style={{ gap: 8 }}>
         {sorted.map((x) => (
-          <BibleChoice key={x.id} x={x} selected={x.id === picked} onPress={() => setPicked(x.id)} />
+          <BibleChoice key={x.id} x={x} selected={x.id === chosen?.id} onPress={() => setPicked(x.id)} />
         ))}
       </View>
+      {!chosen && sorted.length > 1 && (
+        <Txt variant="small" muted style={{ marginTop: 10 }}>
+          {tr('welcome.tapToChoose')}
+        </Txt>
+      )}
       <Button
         title={tr('welcome.start')}
         icon="book-outline"

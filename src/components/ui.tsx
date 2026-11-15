@@ -130,6 +130,7 @@ export function Button({
   title,
   onPress,
   icon,
+  iconRight,
   kind = 'primary',
   disabled,
   loading,
@@ -139,6 +140,8 @@ export function Button({
   title: string;
   onPress?: () => void;
   icon?: IconName;
+  /** Icon after the text (e.g. an arrow for "Next"). */
+  iconRight?: IconName;
   kind?: 'primary' | 'secondary' | 'ghost' | 'danger';
   disabled?: boolean;
   loading?: boolean;
@@ -167,6 +170,7 @@ export function Button({
         <>
           {icon && <Ionicons name={icon} size={small ? 16 : 18} color={fg} />}
           <Text style={[styles.buttonText, small && { fontSize: 14 }, { color: fg }]}>{title}</Text>
+          {iconRight && <Ionicons name={iconRight} size={small ? 16 : 18} color={fg} />}
         </>
       )}
     </Pressable>
