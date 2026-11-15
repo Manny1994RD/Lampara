@@ -10,7 +10,7 @@ import { useLive } from '@/hooks/use-live';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
 import { useT } from '@/i18n';
-import { clearBookReads, getAllReadCounts, markChaptersReadEarlier, undoLastRead } from '@/lib/data';
+import { clearBookReads, getAllReadCounts, getBookReadSummary, markChaptersReadEarlier, removeEarlierReads } from '@/lib/data';
 import { updateSettings } from '@/lib/settings';
 
 export default function ProgressScreen() {
@@ -44,9 +44,9 @@ export default function ProgressScreen() {
     await markChaptersReadEarlier(db, pickedRefs());
     setPicked([]);
   };
-  // Takes one read away from each selected chapter.
+  // Takes one history mark away from each selected chapter (dated readings from the reader stay).
   const unmarkPicked = async () => {
-    for (const r of pickedRefs()) if (counts?.get(`${r.book}:${r.ch}`)) await undoLastRead(db, r.book, r.ch);
+    await removeEarlierReads(db, pickedRefs());
     setPicked([]);
   };
   const stopMarking = () => {
@@ -54,8 +54,12 @@ export default function ProgressScreen() {
     setPicked([]);
   };
   const clearBook = async (b: number) => {
+    const { earlier, dated } = await getBookReadSummary(db, b);
     const title = tr('progress.clearBookTitle', { book: bookName(b, lang) });
-    const body = tr('progress.clearBookBody');
+    // Say exactly what will be lost: dated readings also change streaks, the calendar, plans and challenges.
+    const body = dated
+      ? tr('progress.clearBookBodyDated', { total: earlier + dated, dated, earlier })
+      : tr('progress.clearBookBodyEarlier', { earlier });
     const ok =
       Platform.OS === 'web'
         ? window.confirm(`${title}
@@ -64,7 +68,7 @@ ${body}`)
         : await new Promise<boolean>((resolve) =>
             Alert.alert(title, body, [
               { text: tr('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
-              { text: tr('common.remove'), style: 'destructive', onPress: () => resolve(true) },
+              { text: tr('common.delete'), style: 'destructive', onPress: () => resolve(true) },
             ])
           );
     if (ok) clearBookReads(db, b);
@@ -149,7 +153,7 @@ ${body}`)
               {isOpen && marking && (
                 <Row style={{ flexWrap: 'wrap' }} gap={6}>
                   <Button small kind="secondary" icon="checkbox-outline" title={tr('progress.selectBook')} onPress={() => pickBook(b.n, b.chapters)} />
-                  <Button small kind="ghost" icon="close-circle-outline" title={tr('progress.clearBook')} disabled={!done} onPress={() => clearBook(b.n)} />
+                  <Button small kind="danger" icon="trash-outline" title={tr('progress.clearBook')} disabled={!done} onPress={() => clearBook(b.n)} />
                 </Row>
               )}
               {isOpen && (
@@ -161,7 +165,7 @@ ${body}`)
                       <Pressable
                         key={c}
                         onPress={() => (marking ? togglePick(b.n, c) : open_(b.n, c))}
-                        accessibilityLabel={`${bookName(b.n, lang)} ${c}, read ${n} times`}
+                        accessibilityLabel={tr('progress.chapterA11y', { book: bookName(b.n, lang), ch: c, n })}
                         accessibilityState={{ selected: isPicked }}
                         style={({ pressed }) => [
                           styles.cell,

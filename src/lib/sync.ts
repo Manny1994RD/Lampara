@@ -94,10 +94,62 @@ export async function markAllForUpload(db: SQLiteDatabase) {
   }
 }
 
-/** On sign out: forget the sync position (the local data stays). */
+/** On sign out: forget the sync position (the local data stays, and so does who it belongs to). */
 export async function resetSyncState(db: SQLiteDatabase) {
   await db.runAsync('UPDATE sync_meta SET cursor = 0, last_sync = NULL WHERE id = 1');
   await db.runAsync('DELETE FROM outbox');
+}
+
+/**
+ * What's on this device before an account starts syncing:
+ * - 'empty': no personal data, nothing to decide.
+ * - 'same': the data already belongs to this account.
+ * - 'local': data made without an account (or before this was tracked).
+ * - 'other': data that belongs to a different account (a shared phone).
+ */
+export type LocalDataState = 'empty' | 'same' | 'local' | 'other';
+
+export async function getLocalDataState(db: SQLiteDatabase, userId: string): Promise<LocalDataState> {
+  const meta = await db.getFirstAsync<{ owner: string | null }>('SELECT owner FROM sync_meta WHERE id = 1');
+  const owner = meta?.owner ?? null;
+  if (owner === userId) return 'same';
+  for (const t of SYNC_TABLES) {
+    const row = await db.getFirstAsync(`SELECT 1 FROM ${t.table} LIMIT 1`);
+    if (row) return owner ? 'other' : 'local';
+  }
+  return 'empty';
+}
+
+/**
+ * Prepares this device for an account before syncing starts.
+ * keep = true: the data here is uploaded to the account. keep = false: it is deleted from this device first.
+ * Either way the account's own data is downloaded from the start.
+ */
+export async function adoptLocalData(db: SQLiteDatabase, userId: string, keep: boolean) {
+  if (!keep) await wipePersonalData(db);
+  await db.runAsync('UPDATE sync_meta SET cursor = 0, last_sync = NULL, owner = ? WHERE id = 1', userId);
+  if (keep) await markAllForUpload(db);
+}
+
+/** Devices signed in before owners were tracked: the signed-in account owns what's here. */
+export async function claimDataIfUnowned(db: SQLiteDatabase, userId: string) {
+  await db.runAsync('UPDATE sync_meta SET owner = ? WHERE id = 1 AND owner IS NULL', userId);
+}
+
+/** Deletes the readings, highlights, bookmarks, notes, topics and plans on this device (Bibles stay). */
+export async function wipePersonalData(db: SQLiteDatabase) {
+  await db.withTransactionAsync(async () => {
+    // Deleting with applying = 1 so the deletions aren't recorded as changes to send to the hub.
+    await db.runAsync('UPDATE sync_meta SET applying = 1 WHERE id = 1');
+    try {
+      for (const t of SYNC_TABLES) await db.runAsync(`DELETE FROM ${t.table}`);
+      await db.runAsync('DELETE FROM outbox');
+      await db.runAsync('UPDATE sync_meta SET cursor = 0, last_sync = NULL, owner = NULL WHERE id = 1');
+    } finally {
+      await db.runAsync('UPDATE sync_meta SET applying = 0 WHERE id = 1');
+    }
+  });
+  for (const t of new Set(Object.values(TOPIC_OF))) notify(t);
 }
 
 export async function getSyncInfo(db: SQLiteDatabase) {

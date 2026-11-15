@@ -3,6 +3,12 @@
     "name": "Lámpara",
     "slug": "lampara",
     "version": "0.1.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/1390b48f-da42-4e76-b53f-5586ce356712"
+    },
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "lampara",
@@ -93,7 +99,8 @@
             }
           ]
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

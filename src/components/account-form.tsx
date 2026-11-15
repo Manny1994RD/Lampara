@@ -5,9 +5,9 @@ import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Button, Card, Ionicons, Row, Txt, type IconName } from '@/components/ui';
 import { useTheme } from '@/hooks/use-theme';
 import { useT } from '@/i18n';
-import { defaultHubUrl, resetPassword, signIn, signUp } from '@/lib/hub';
+import { defaultHubUrl, isInsecureUrl, resetPassword, signIn, signUp, startSession, type HubSession } from '@/lib/hub';
 import { refreshHubBibles } from '@/lib/hub-bibles';
-import { markAllForUpload, syncNow } from '@/lib/sync';
+import { adoptLocalData, getLocalDataState, syncNow, type LocalDataState } from '@/lib/sync';
 
 export type AccountMode = 'join' | 'signin' | 'reset';
 
@@ -40,23 +40,45 @@ export function AccountForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const submit = async () => {
+  // Signed in, waiting for the person to decide what happens to the data already on this phone.
+  const [pending, setPending] = useState<{ session: HubSession; data: LocalDataState } | null>(null);
+
+  /** Starts syncing: keep = upload the data on this phone, or delete it from this phone first. */
+  const finish = async (session: HubSession, keep: boolean) => {
     setBusy(true);
     setError(null);
     try {
-      if (mode === 'signin') await signIn(url, email, password);
-      else if (mode === 'join') await signUp(url, name, email, password, code);
-      else await resetPassword(url, email, code, password);
-      // Send what's already on this device, then bring in what's on the hub.
-      await markAllForUpload(db);
+      await adoptLocalData(db, session.user.id, keep);
+      startSession(session);
       await refreshHubBibles(db).catch(() => undefined);
       await syncNow(db).catch(() => undefined);
+      setPending(null);
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
+  };
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    let session: HubSession;
+    try {
+      if (mode === 'signin') session = await signIn(url, email, password);
+      else if (mode === 'join') session = await signUp(url, name, email, password, code);
+      else session = await resetPassword(url, email, code, password);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+      return;
+    }
+    const data = await getLocalDataState(db, session.user.id).catch((): LocalDataState => 'local');
+    setBusy(false);
+    // Nothing here, or it's already this account's: go straight in.
+    if (data === 'empty' || data === 'same') return finish(session, true);
+    setPending({ session, data });
   };
 
   const input = [styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.card }];
@@ -85,6 +107,51 @@ export function AccountForm({
       </Txt>
     </Pressable>
   );
+
+  if (pending) {
+    const other = pending.data === 'other';
+    return (
+      <Card style={{ gap: 12 }}>
+        <Row>
+          <Ionicons name="phone-portrait-outline" size={22} color={t.accent} />
+          <Txt variant="heading" style={{ flex: 1 }}>
+            {tr('account.dataTitle')}
+          </Txt>
+        </Row>
+        <Txt>{other ? tr('account.dataOther') : tr('account.dataLocal')}</Txt>
+        {error && (
+          <Txt variant="small" color={t.danger}>
+            {error}
+          </Txt>
+        )}
+        <View style={{ gap: 4 }}>
+          <Button
+            kind={other ? 'secondary' : 'primary'}
+            icon="cloud-upload-outline"
+            title={tr('account.dataUpload')}
+            loading={busy}
+            onPress={() => finish(pending.session, true)}
+          />
+          <Txt variant="caption" muted>
+            {tr('account.dataUploadHint')}
+          </Txt>
+        </View>
+        <View style={{ gap: 4 }}>
+          <Button
+            kind={other ? 'primary' : 'secondary'}
+            icon="refresh-outline"
+            title={tr('account.dataFresh')}
+            disabled={busy}
+            onPress={() => finish(pending.session, false)}
+          />
+          <Txt variant="caption" muted>
+            {tr('account.dataFreshHint')}
+          </Txt>
+        </View>
+        <Button small kind="ghost" title={tr('common.cancel')} disabled={busy} onPress={() => setPending(null)} />
+      </Card>
+    );
+  }
 
   return (
     <View style={{ gap: 12 }}>
@@ -174,6 +241,14 @@ export function AccountForm({
           </>
         ) : null}
 
+        {isInsecureUrl(url) && (
+          <View style={[styles.error, { borderColor: t.textSecondary }]}>
+            <Ionicons name="lock-open-outline" size={18} color={t.textSecondary} />
+            <Txt variant="small" muted style={{ flex: 1 }}>
+              {tr('account.insecure')}
+            </Txt>
+          </View>
+        )}
         {error && (
           <View style={[styles.error, { borderColor: t.danger }]}>
             <Ionicons name="alert-circle-outline" size={18} color={t.danger} />

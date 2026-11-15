@@ -6,7 +6,7 @@ import { subscribe } from '@/lib/db';
 import { refreshAuth, useHub } from '@/lib/hub';
 import { refreshHubBibles } from '@/lib/hub-bibles';
 import { updateChallengeProgress } from '@/lib/social';
-import { syncNow } from '@/lib/sync';
+import { claimDataIfUnowned, syncNow } from '@/lib/sync';
 
 /**
  * Keeps this device in sync with your hub while you're signed in:
@@ -17,6 +17,7 @@ export function HubSync() {
   const db = useSQLiteContext();
   const hub = useHub();
   const signedIn = !!hub;
+  const userId = hub?.user.id ?? null;
 
   useEffect(() => {
     if (!signedIn) return;
@@ -29,6 +30,7 @@ export function HubSync() {
         if (alive) console.warn('hub Bibles failed', e instanceof Error ? e.message : e);
       });
       try {
+        if (userId) await claimDataIfUnowned(db, userId);
         await syncNow(db);
         await updateChallengeProgress(db);
       } catch (e) {
@@ -58,7 +60,7 @@ export function HubSync() {
       clearInterval(interval);
       if (timer) clearTimeout(timer);
     };
-  }, [db, signedIn]);
+  }, [db, signedIn, userId]);
 
   return null;
 }

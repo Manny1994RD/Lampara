@@ -97,7 +97,7 @@ export default function NewChallengeScreen() {
         <Txt variant="label">{tr('challenge.length')}</Txt>
         <Row style={{ flexWrap: 'wrap' }}>
           {LENGTHS.map((d) => (
-            <Chip key={d} label={`${d} days`} selected={days === d} onPress={() => { setDays(d); if (goal === 'days') setTarget(String(d)); }} />
+            <Chip key={d} label={`${d} ${tr('challenge.unit.days')}`} selected={days === d} onPress={() => { setDays(d); if (goal === 'days') setTarget(String(d)); }} />
           ))}
         </Row>
         <Row>

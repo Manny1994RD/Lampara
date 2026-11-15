@@ -117,25 +117,26 @@ export async function forgetStreamingBibles(db: SQLiteDatabase) {
 
 /**
  * Makes sure a chapter of a hub Bible is on this device (fetching it if needed).
- * Returns false when the chapter isn't available (offline, signed out, or not in this Bible).
+ * 'ok' = it's here now; 'missing' = not a hub Bible, signed out, or this Bible doesn't have the chapter;
+ * 'failed' = it couldn't be fetched right now (no connection or a hub problem) — worth trying again.
  */
-export async function ensureChapter(db: SQLiteDatabase, tr: string, book: number, ch: number): Promise<boolean> {
+export async function ensureChapter(db: SQLiteDatabase, tr: string, book: number, ch: number): Promise<'ok' | 'missing' | 'failed'> {
   const info = await trInfo(db, tr);
-  if (!info?.hub_id || info.offline || !getHub()) return false;
+  if (!info?.hub_id || info.offline || !getHub()) return 'missing';
   let verses: HubVerse[];
   try {
     verses = (await hubFetch<{ verses: HubVerse[] }>(`/api/lampara/bibles/${info.hub_id}/text?book=${book}&ch=${ch}`)).verses;
   } catch (e) {
     console.warn('chapter fetch failed', e instanceof Error ? e.message : e);
-    return false;
+    return 'failed';
   }
-  if (!verses.length) return false;
+  if (!verses.length) return 'missing';
   await db.withTransactionAsync(async () => {
     await insertVerses(db, tr, verses);
     await db.runAsync('INSERT OR REPLACE INTO cached_chapters (tr, book, ch, used_at) VALUES (?, ?, ?, ?)', tr, book, ch, nowIso());
   });
   await trimCache(db);
-  return true;
+  return 'ok';
 }
 
 /** Marks a cached chapter as recently used. */

@@ -1,3 +1,4 @@
+import * as SecureStore from 'expo-secure-store';
 import Storage from 'expo-sqlite/kv-store';
 import { useSyncExternalStore } from 'react';
 import { Platform } from 'react-native';
@@ -10,6 +11,9 @@ export type HubUser = { id: string; name: string; email: string; friend_code: st
 export type HubState = { url: string; token: string; user: HubUser } | null;
 
 const KEY = 'hub.v1';
+// The login token. On phones it lives in the encrypted secure store (Keychain / Keystore);
+// the rest of the session (address, name) stays in the normal key-value store.
+const TOKEN_KEY = 'hub.token';
 // The last hub address used on this device (kept after signing out, so it doesn't have to be typed again).
 const LAST_URL_KEY = 'hub.lastUrl';
 
@@ -27,21 +31,57 @@ const store = {
   },
 };
 
-let state: HubState = (() => {
+type Saved = { url: string; user: HubUser; token?: string };
+
+function loadState(): HubState {
   try {
     const raw = store.get();
-    return raw ? (JSON.parse(raw) as HubState) : null;
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as Saved;
+    // The website has no secure store; the browser keeps the whole session.
+    if (Platform.OS === 'web') return saved.token ? { url: saved.url, token: saved.token, user: saved.user } : null;
+    let token = SecureStore.getItem(TOKEN_KEY);
+    if (saved.token) {
+      // Older versions kept the token in plain storage: move it to the secure store.
+      if (!token) {
+        SecureStore.setItem(TOKEN_KEY, saved.token);
+        token = saved.token;
+      }
+      store.set(JSON.stringify({ url: saved.url, user: saved.user }));
+    }
+    return token ? { url: saved.url, token, user: saved.user } : null;
   } catch {
     return null;
   }
-})();
+}
+
+function persist(next: HubState) {
+  if (Platform.OS === 'web') {
+    store.set(next ? JSON.stringify(next) : null);
+    return;
+  }
+  if (!next) {
+    store.set(null);
+    SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => undefined);
+    return;
+  }
+  try {
+    SecureStore.setItem(TOKEN_KEY, next.token);
+    store.set(JSON.stringify({ url: next.url, user: next.user }));
+  } catch {
+    // The token can't be stored safely: keep the session in memory only (sign in again next time).
+    store.set(null);
+  }
+}
+
+let state: HubState = loadState();
 const listeners = new Set<() => void>();
 
 function setState(next: HubState) {
   state = next;
   if (next) rememberUrl(next.url);
   try {
-    store.set(next ? JSON.stringify(next) : null);
+    persist(next);
   } catch {
     // keep in memory
   }
@@ -102,10 +142,35 @@ export function rememberUrl(url: string) {
   }
 }
 
+/** Home-network addresses (localhost, 192.168.x.x, 10.x.x.x, 172.16–31.x.x, *.local) where a hub usually has no https. */
+function isLocalHost(host: string) {
+  const h = host.toLowerCase();
+  return (
+    h === 'localhost' ||
+    h.endsWith('.local') ||
+    /^127\./.test(h) ||
+    /^10\./.test(h) ||
+    /^192\.168\./.test(h) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(h)
+  );
+}
+
+/** Adds https:// when no scheme is typed (http:// only for home-network addresses). */
 export function normalizeUrl(url: string) {
   let u = url.trim().replace(/\/+$/, '');
-  if (u && !/^https?:\/\//i.test(u)) u = `http://${u}`;
+  if (u && !/^https?:\/\//i.test(u)) {
+    const host = u.split(/[/:]/)[0];
+    u = `${isLocalHost(host) ? 'http' : 'https'}://${u}`;
+  }
   return u;
+}
+
+/** True when the password and data would travel unencrypted to another computer. */
+export function isInsecureUrl(url: string) {
+  const u = normalizeUrl(url);
+  if (!/^http:\/\//i.test(u)) return false;
+  const host = u.replace(/^http:\/\//i, '').split(/[/:]/)[0].toLowerCase();
+  return host !== 'localhost' && !/^127\./.test(host);
 }
 
 /** Turns the hub's (English, technical) error replies into plain words in the app's language. */
@@ -167,7 +232,14 @@ export async function hubFetch<T = unknown>(
 
 type AuthResponse = { token: string; record: HubUser };
 
-export async function signIn(url: string, email: string, password: string) {
+/** A signed-in session that hasn't been started yet (see startSession). */
+export type HubSession = NonNullable<HubState>;
+
+/**
+ * Checks the email and password and returns the session, without starting it yet:
+ * the caller first decides what happens to the data already on this device, then calls startSession.
+ */
+export async function signIn(url: string, email: string, password: string): Promise<HubSession> {
   const u = normalizeUrl(url);
   const res = await hubFetch<AuthResponse>('/api/collections/users/auth-with-password', {
     url: u,
@@ -175,7 +247,7 @@ export async function signIn(url: string, email: string, password: string) {
     method: 'POST',
     body: { identity: email.trim(), password },
   });
-  setState({ url: u, token: res.token, user: pickUser(res.record) });
+  return { url: u, token: res.token, user: pickUser(res.record) };
 }
 
 export async function signUp(url: string, name: string, email: string, password: string, invite: string) {
@@ -187,7 +259,7 @@ export async function signUp(url: string, name: string, email: string, password:
     method: 'POST',
     body: { name: name.trim(), email: email.trim(), password, passwordConfirm: password },
   });
-  await signIn(u, email, password);
+  return signIn(u, email, password);
 }
 
 /** Forgot password: choose a new one with the code from the hub owner. */
@@ -199,7 +271,12 @@ export async function resetPassword(url: string, email: string, code: string, pa
     method: 'POST',
     body: { email: email.trim(), code: code.trim(), password },
   });
-  await signIn(u, email, password);
+  return signIn(u, email, password);
+}
+
+/** Starts using a session from signIn / signUp / resetPassword (syncing begins). */
+export function startSession(session: HubSession) {
+  setState(session);
 }
 
 /** Hub owner: make a one-time password reset code for a member. */

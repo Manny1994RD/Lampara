@@ -49,6 +49,13 @@ export function getTranslations(db: SQLiteDatabase) {
 
 /* ------------------------------- reading -------------------------------- */
 
+/** The chapter couldn't be fetched from the church library right now (try again later). */
+export class ChapterLoadError extends Error {
+  constructor() {
+    super('chapter could not be loaded');
+  }
+}
+
 export async function getChapter(db: SQLiteDatabase, tr: string, book: number, ch: number): Promise<Verse[]> {
   const load = () =>
     db.getAllAsync<{ book: number; ch: number; v: number; text: string; marks: string | null; para: number }>(
@@ -60,7 +67,9 @@ export async function getChapter(db: SQLiteDatabase, tr: string, book: number, c
   let rows = await load();
   if (rows.length === 0) {
     // Bibles read from your hub: fetch the chapter and keep it for a while.
-    if (await ensureChapter(db, tr, book, ch)) rows = await load();
+    const got = await ensureChapter(db, tr, book, ch);
+    if (got === 'failed') throw new ChapterLoadError();
+    if (got === 'ok') rows = await load();
   } else {
     await touchChapter(db, tr, book, ch);
   }
@@ -146,7 +155,40 @@ export async function markChaptersReadEarlier(db: SQLiteDatabase, refs: { book: 
   notify('reads');
 }
 
-/** Removes every read of a book (all its chapters). */
+/**
+ * Takes one history mark away from each chapter (only marks added from Progress).
+ * Readings with a real date (from the reader) are never touched, so today's count,
+ * streaks, plans and challenges stay as they are.
+ */
+export async function removeEarlierReads(db: SQLiteDatabase, refs: { book: number; ch: number }[]) {
+  if (!refs.length) return;
+  await db.withTransactionAsync(async () => {
+    for (const r of refs) {
+      await db.runAsync(
+        `DELETE FROM chapter_reads WHERE id = (
+           SELECT id FROM chapter_reads WHERE book = ? AND ch = ? AND day = ? ORDER BY read_at DESC LIMIT 1)`,
+        r.book,
+        r.ch,
+        EARLIER_DAY
+      );
+    }
+  });
+  notify('reads');
+}
+
+/** How many readings of a book are history marks and how many have a real date (for the delete warning). */
+export async function getBookReadSummary(db: SQLiteDatabase, book: number) {
+  const r = await db.getFirstAsync<{ earlier: number; dated: number }>(
+    `SELECT COALESCE(SUM(day = ?), 0) AS earlier, COALESCE(SUM(day != ?), 0) AS dated
+       FROM chapter_reads WHERE book = ?`,
+    EARLIER_DAY,
+    EARLIER_DAY,
+    book
+  );
+  return { earlier: r?.earlier ?? 0, dated: r?.dated ?? 0 };
+}
+
+/** Removes every read of a book (all its chapters), including dated readings from the reader. */
 export async function clearBookReads(db: SQLiteDatabase, book: number) {
   await db.runAsync('DELETE FROM chapter_reads WHERE book = ?', book);
   notify('reads');
@@ -239,8 +281,10 @@ export async function getReadingStats(db: SQLiteDatabase): Promise<ReadingStats>
   const todayReads = days.get(localDay()) ?? 0;
   const s = computeStreak(days);
 
+  // The last chapter actually read (history marks from Progress have no real date, so they don't count).
   const lastRead = await db.getFirstAsync<{ book: number; ch: number; read_at: string }>(
-    'SELECT book, ch, read_at FROM chapter_reads ORDER BY read_at DESC LIMIT 1'
+    'SELECT book, ch, read_at FROM chapter_reads WHERE day != ? ORDER BY read_at DESC LIMIT 1',
+    EARLIER_DAY
   );
   return {
     totalReads,

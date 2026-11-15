@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { planChapters, splitIntoDays, type ChapterRef, type PlanKind } from '@/data/plans';
+import { EARLIER_DAY } from './data';
 import { localDay, newId, notify, nowIso } from './db';
 
 export type PlanRow = {
@@ -89,9 +90,11 @@ export function getPlans(db: SQLiteDatabase) {
 
 export async function getPlanProgress(db: SQLiteDatabase, plan: PlanRow): Promise<PlanProgress> {
   const chapters = planChapters(plan.kind, plan.books ? JSON.parse(plan.books) : []);
+  // Chapters read on or after the plan's first day. History marks (read "earlier", no real day) never count.
   const reads = await db.getAllAsync<{ book: number; ch: number }>(
-    'SELECT DISTINCT book, ch FROM chapter_reads WHERE read_at >= ?',
-    plan.started_at
+    'SELECT DISTINCT book, ch FROM chapter_reads WHERE day >= ? AND day != ?',
+    plan.start_day,
+    EARLIER_DAY
   );
   const done = new Set(reads.map((r) => `${r.book}:${r.ch}`));
   const days = splitIntoDays(chapters, plan.days);

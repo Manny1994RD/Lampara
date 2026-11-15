@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
@@ -5,12 +6,13 @@ import { useState } from 'react';
 import { useLive } from '@/hooks/use-live';
 import { makeResetCode, signOut, useHub } from '@/lib/hub';
 import { updateChallengeProgress } from '@/lib/social';
-import { getSyncInfo, resetSyncState, syncNow } from '@/lib/sync';
+import { getSyncInfo, resetSyncState, syncNow, wipePersonalData } from '@/lib/sync';
 import { Alert, Platform, Pressable, Share, StyleSheet, Switch, TextInput, View } from 'react-native';
 
+import { AppUpdates } from '@/components/app-updates';
 import { ImportButton } from '@/components/import-button';
 import { SyncBadge } from '@/components/sync-badge';
-import { Button, Card, Chip, IconButton, Ionicons, Row, Screen, SectionTitle, Txt } from '@/components/ui';
+import { Button, Card, Chip, IconButton, Ionicons, Row, Screen, SectionTitle, Sheet, Txt } from '@/components/ui';
 import { useTheme } from '@/hooks/use-theme';
 import { LANGUAGES, getT, useT } from '@/i18n';
 import { useTranslations } from '@/hooks/use-translation';
@@ -20,12 +22,12 @@ import { deleteTranslation } from '@/lib/importer';
 import { ensureNotificationPermission, notificationsSupported } from '@/lib/notifications';
 import { getSettings, updateSettings, useSettings } from '@/lib/settings';
 
-function confirm(title: string, msg: string): Promise<boolean> {
+function confirm(title: string, msg: string, okLabel = getT().t('common.remove')): Promise<boolean> {
   if (Platform.OS === 'web') return Promise.resolve(window.confirm(`${title}\n\n${msg}`));
   return new Promise((resolve) =>
     Alert.alert(title, msg, [
       { text: getT().t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
-      { text: getT().t('common.remove'), style: 'destructive', onPress: () => resolve(true) },
+      { text: okLabel, style: 'destructive', onPress: () => resolve(true) },
     ])
   );
 }
@@ -161,9 +163,16 @@ export default function SettingsScreen() {
         <IconButton icon="add-circle-outline" size={30} label={tr('read.bigger')} onPress={() => updateSettings({ fontSize: Math.min(34, settings.fontSize + 1) })} />
       </Row>
 
+      {Platform.OS !== 'web' && (
+        <>
+          <SectionTitle>{tr('updates.title')}</SectionTitle>
+          <AppUpdates />
+        </>
+      )}
+
       <SectionTitle>{tr('settings.about')}</SectionTitle>
       <Card style={{ gap: 6 }}>
-        <Txt variant="label">{tr('settings.version', { v: '0.5' })}</Txt>
+        <Txt variant="label">{tr('settings.version', { v: Constants.expoConfig?.version ?? '' })}</Txt>
         <Txt variant="small" muted>
           {tr('settings.verse')}
         </Txt>
@@ -318,6 +327,29 @@ function HubCard() {
   const info = useLive((d) => getSyncInfo(d), [], ['hub', 'reads', 'highlights', 'notes', 'topics', 'bookmarks', 'plans']);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [leaving, setLeaving] = useState(false);
+
+  /** Sign out. wipe = also delete this person's readings, notes, highlights… from this phone (shared phones). */
+  const leave = async (wipe: boolean) => {
+    if (wipe) {
+      setBusy(true);
+      // Send the last changes first, so nothing is lost when this phone forgets them.
+      const synced = await syncNow(db).then(
+        () => true,
+        () => false
+      );
+      const left = (await getSyncInfo(db)).pending;
+      setBusy(false);
+      if ((!synced || left > 0) && !(await confirm(tr('settings.signOutPendingTitle'), tr('settings.signOutPendingBody'), tr('common.delete')))) return;
+      await wipePersonalData(db);
+      updateSettings({ seenBadges: [] });
+    } else {
+      await resetSyncState(db);
+    }
+    await forgetStreamingBibles(db);
+    setLeaving(false);
+    signOut();
+  };
 
   if (!hub)
     return (
@@ -376,15 +408,28 @@ function HubCard() {
           kind="ghost"
           icon="log-out-outline"
           title={tr('settings.signOut')}
-          onPress={async () => {
-            if (await confirm(tr('settings.signOutTitle'), tr('settings.signOutBody'))) {
-              await resetSyncState(db);
-              await forgetStreamingBibles(db);
-              signOut();
-            }
-          }}
+          onPress={() => setLeaving(true)}
         />
       </Row>
+
+      <Sheet visible={leaving} onClose={() => setLeaving(false)} title={tr('settings.signOutTitle')}>
+        <View style={{ gap: 14 }}>
+          <Txt>{tr('settings.signOutBody')}</Txt>
+          <View style={{ gap: 4 }}>
+            <Button icon="phone-portrait-outline" kind="secondary" title={tr('settings.signOutKeep')} disabled={busy} onPress={() => leave(false)} />
+            <Txt variant="caption" muted>
+              {tr('settings.signOutKeepHint')}
+            </Txt>
+          </View>
+          <View style={{ gap: 4 }}>
+            <Button icon="trash-outline" kind="danger" title={tr('settings.signOutWipe')} loading={busy} onPress={() => leave(true)} />
+            <Txt variant="caption" muted>
+              {tr('settings.signOutWipeHint')}
+            </Txt>
+          </View>
+          <Button small kind="ghost" title={tr('common.cancel')} disabled={busy} onPress={() => setLeaving(false)} />
+        </View>
+      </Sheet>
     </Card>
   );
 }

@@ -3,7 +3,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { guessLanguage } from './esword';
 
 export const DB_NAME = 'lampara.db';
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 /**
  * Personal tables that sync to the hub: [sync kind, table, SQL expression for the item id].
@@ -200,6 +200,12 @@ export async function migrateDb(db: SQLiteDatabase) {
       const lang = guessLanguage(rows.map((r) => r.text).join(' '), t.name);
       if (lang !== t.lang) await db.runAsync('UPDATE translations SET lang = ? WHERE id = ?', lang, t.id);
     }
+  }
+
+  if (current < 6) {
+    // Which account the personal data on this device belongs to (NULL = never signed in / not known).
+    // Used to stop one person's readings and notes from being uploaded to someone else's account.
+    await db.execAsync(`ALTER TABLE sync_meta ADD COLUMN owner TEXT;`);
   }
 
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);

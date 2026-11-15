@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   ImageBackground,
   Platform,
   Pressable,
@@ -46,6 +47,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from '@/hooks/use-translation';
 import { useT, type TKey } from '@/i18n';
 import {
+  ChapterLoadError,
   getChapter,
   getChapterBookmarks,
   getChapterHighlights,
@@ -75,11 +77,19 @@ export default function ReadScreen() {
   const { book, chapter } = settings;
   const tr = current?.id ?? null;
 
-  const verses = useLive((d) => (tr ? getChapter(d, tr, book, chapter) : Promise.resolve([])), [tr, book, chapter], ['translations']);
+  // Each load is tagged with the chapter it belongs to, so the previous chapter's text never shows
+  // under the new chapter's title while the new one loads (or after it fails).
+  const [retry, setRetry] = useState(0);
+  const chapterKey = `${tr}:${book}:${chapter}`;
+  const loaded = useLive((d) => loadChapter(d, tr, book, chapter), [tr, book, chapter, retry], ['translations']);
+  const current1 = loaded?.key === chapterKey ? loaded : undefined;
+  const verses = current1?.verses;
+  const loadFailed = !!current1?.failed;
   // Second Bible side by side (scroll view only).
   const second = settings.parallelBible && settings.parallelBible !== tr ? (list?.find((x) => x.id === settings.parallelBible) ?? null) : null;
   const tr2 = second?.id ?? null;
-  const verses2 = useLive((d) => (tr2 ? getChapter(d, tr2, book, chapter) : Promise.resolve([])), [tr2, book, chapter], ['translations']);
+  const loaded2 = useLive((d) => loadChapter(d, tr2, book, chapter), [tr2, book, chapter, retry], ['translations']);
+  const verses2 = loaded2?.key === `${tr2}:${book}:${chapter}` ? loaded2.verses : undefined;
   const { width: winW } = useWindowDimensions();
   const fullscreen = settings.readerFullscreen;
   const highlights = useLive((d) => getChapterHighlights(d, book, chapter), [book, chapter], ['highlights']);
@@ -99,7 +109,6 @@ export default function ReadScreen() {
   );
 
   // Selection is tied to the chapter it was made in, so it clears automatically when the chapter changes.
-  const chapterKey = `${tr}:${book}:${chapter}`;
   const [selection, setSelection] = useState<{ key: string; verses: number[] }>({ key: '', verses: [] });
   const selected = selection.key === chapterKey ? selection.verses : [];
   const setSelected = (fn: number[] | ((s: number[]) => number[])) =>
@@ -352,7 +361,17 @@ export default function ReadScreen() {
             {bookName(book, lang)} {chapter}
           </Text>
 
-          {verses === undefined ? null : verses.length === 0 ? (
+          {verses === undefined ? (
+            <Row style={{ marginVertical: 30, justifyContent: 'center' }}>
+              <ActivityIndicator color={pc.muted} />
+              <Txt muted>{L('read.loading')}</Txt>
+            </Row>
+          ) : loadFailed ? (
+            <View style={{ marginVertical: 30, gap: 12, alignItems: 'flex-start' }}>
+              <Txt muted>{L('read.loadFailed')}</Txt>
+              <Button kind="secondary" icon="refresh" title={L('read.retry')} onPress={() => setRetry((n) => n + 1)} />
+            </View>
+          ) : verses.length === 0 ? (
             <Txt muted style={{ marginVertical: 30 }}>
               {missingText}
             </Txt>
@@ -739,6 +758,18 @@ function PaperSwatch({
       </Txt>
     </Pressable>
   );
+}
+
+/** Loads a chapter, tagged with which one it is. failed = it couldn't be fetched from the church library. */
+async function loadChapter(db: SQLiteDatabase, tr: string | null, book: number, ch: number) {
+  const key = `${tr}:${book}:${ch}`;
+  if (!tr) return { key, verses: [] as Verse[], failed: false };
+  try {
+    return { key, verses: await getChapter(db, tr, book, ch), failed: false };
+  } catch (e) {
+    if (!(e instanceof ChapterLoadError)) console.warn('chapter failed', e instanceof Error ? e.message : e);
+    return { key, verses: [] as Verse[], failed: true };
+  }
 }
 
 const styles = StyleSheet.create({
