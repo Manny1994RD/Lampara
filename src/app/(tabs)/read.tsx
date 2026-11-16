@@ -710,6 +710,15 @@ export default function ReadScreen() {
           <Txt variant="label">{L('read.fullscreen')}</Txt>
           <Switch value={fullscreen} onValueChange={(v) => updateSettings({ readerFullscreen: v })} />
         </Row>
+        <Row style={{ justifyContent: 'space-between', marginBottom: 16 }}>
+          <View style={{ flex: 1 }}>
+            <Txt variant="label">{L('read.redLetters')}</Txt>
+            <Txt variant="small" muted>
+              {L('read.redLettersHint')}
+            </Txt>
+          </View>
+          <Switch value={settings.redLetters} onValueChange={(v) => updateSettings({ redLetters: v })} />
+        </Row>
         <Txt variant="label" style={{ marginBottom: 8 }}>
           {L('read.style')}
         </Txt>

@@ -53,6 +53,8 @@ export type Settings = {
   autoMarkListened: boolean;
   /** Finished (or skipped) the first-start welcome steps. */
   onboarded: boolean;
+  /** Words of Jesus in red (Bibles that mark them, e.g. e-Sword RVR1960, LBLA, ESV). */
+  redLetters: boolean;
 };
 
 const DEFAULTS: Settings = {
@@ -85,6 +87,7 @@ const DEFAULTS: Settings = {
   listenMini: false,
   autoMarkListened: true,
   onboarded: false,
+  redLetters: true,
 };
 
 const KEY = 'settings.v1';

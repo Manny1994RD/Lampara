@@ -7,6 +7,8 @@ export type Segment = {
   start: number;
   italic: boolean;
   bold: boolean;
+  /** Words of Jesus (red letters). */
+  red: boolean;
   /** word-level highlight color (takes priority over the verse color) */
   color: HighlightColor | null;
 };
@@ -40,7 +42,8 @@ export function buildSegments(text: string, marks: Mark[], wordHighlights: Highl
     for (const h of wordHighlights) {
       if (h.start != null && h.end != null && h.start <= s && h.end >= e) color = h.color;
     }
-    segs.push({ text: text.slice(s, e), start: s, italic, bold, color });
+    const red = marks.some((m) => m.t === 'r' && m.s <= s && m.e >= e);
+    segs.push({ text: text.slice(s, e), start: s, italic, bold, red, color });
   }
   return segs;
 }

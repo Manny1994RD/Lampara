@@ -7,7 +7,8 @@
  *   " In {\cf6\super G1722} the beginning ..."     (Strong's numbers)
  */
 
-export type MarkType = 'i' | 'b';
+/** i = italic, b = bold, r = words of Jesus (red letters). */
+export type MarkType = 'i' | 'b' | 'r';
 export type Mark = { s: number; e: number; t: MarkType };
 export type ParsedVerse = {
   text: string;
@@ -16,7 +17,10 @@ export type ParsedVerse = {
   para: boolean;
 };
 
-type Style = { i: boolean; b: boolean; hidden: boolean; skip: boolean };
+type Style = { i: boolean; b: boolean; r: boolean; hidden: boolean; skip: boolean };
+
+/** e-Sword's color number for the words of Jesus (RVR1960, LBLA, ESV, …). */
+const RED = 6;
 
 const CP1252: Record<number, string> = {
   0x80: '€', 0x82: '‚', 0x83: 'ƒ', 0x84: '„', 0x85: '…', 0x86: '†', 0x87: '‡', 0x88: 'ˆ',
@@ -38,14 +42,15 @@ export function parseEswordVerse(raw: string | null | undefined): ParsedVerse {
   let out = '';
   const marks: Mark[] = [];
   const stack: Style[] = [];
-  let st: Style = { i: false, b: false, hidden: false, skip: false };
+  let st: Style = { i: false, b: false, r: false, hidden: false, skip: false };
   let groupStart = false; // true right after "{" (to detect destination groups)
   let skipFallback = 0; // chars to skip after \uN
   let paraAtEnd = false;
 
-  // Open style runs: start offsets for i / b
+  // Open style runs: start offsets for i / b / r
   let iStart = -1;
   let bStart = -1;
+  let rStart = -1;
   const syncMarks = () => {
     const visibleI = st.i && !st.hidden && !st.skip;
     const visibleB = st.b && !st.hidden && !st.skip;
@@ -58,6 +63,12 @@ export function parseEswordVerse(raw: string | null | undefined): ParsedVerse {
     if (!visibleB && bStart >= 0) {
       if (out.length > bStart) marks.push({ s: bStart, e: out.length, t: 'b' });
       bStart = -1;
+    }
+    const visibleR = st.r && !st.hidden && !st.skip;
+    if (visibleR && rStart < 0) rStart = out.length;
+    if (!visibleR && rStart >= 0) {
+      if (out.length > rStart) marks.push({ s: rStart, e: out.length, t: 'r' });
+      rStart = -1;
     }
   };
 
@@ -81,7 +92,7 @@ export function parseEswordVerse(raw: string | null | undefined): ParsedVerse {
       continue;
     }
     if (c === '}') {
-      st = stack.pop() ?? { i: false, b: false, hidden: false, skip: false };
+      st = stack.pop() ?? { i: false, b: false, r: false, hidden: false, skip: false };
       syncMarks();
       groupStart = false;
       k++;
@@ -139,9 +150,14 @@ export function parseEswordVerse(raw: string | null | undefined): ParsedVerse {
         case 'nosupersub':
           st.hidden = false;
           break;
+        case 'cf':
+          // Text color: color 6 is how e-Sword Bibles mark the words of Jesus.
+          st.r = num === RED;
+          break;
         case 'plain':
           st.i = false;
           st.b = false;
+          st.r = false;
           st.hidden = false;
           break;
         case 'u':
@@ -167,7 +183,7 @@ export function parseEswordVerse(raw: string | null | undefined): ParsedVerse {
     k++;
   }
   // close open runs
-  st = { i: false, b: false, hidden: false, skip: false };
+  st = { i: false, b: false, r: false, hidden: false, skip: false };
   syncMarks();
 
   // Strip stray tags like <1> and normalize whitespace while remapping mark offsets.

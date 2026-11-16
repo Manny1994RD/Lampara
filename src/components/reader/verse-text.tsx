@@ -4,6 +4,7 @@ import { highlightBg } from '@/components/ui';
 import type { HighlightColor } from '@/constants/theme';
 import type { Highlight, Verse } from '@/lib/data';
 import { buildSegments } from '@/lib/segments';
+import { useSettings } from '@/lib/settings';
 import { shiftHighlights } from '@/lib/verse-layout';
 
 export type VerseColors = { text: string; accent: string; dark: boolean };
@@ -41,6 +42,8 @@ export function VerseText({
   leadingSpace?: boolean;
 }) {
   const segs = buildSegments(verse.text, verse.marks, shiftHighlights(wordHighlights, verse.cut));
+  // Words of Jesus: a deep red that stays readable on paper and in dark mode.
+  const red = useSettings().redLetters ? (colors.dark ? '#FF8A80' : '#B3261E') : null;
   return (
     <Text
       onPress={onPress}
@@ -70,6 +73,7 @@ export function VerseText({
               bg && { backgroundColor: highlightBg(bg, colors.dark) },
               s.italic && { fontStyle: 'italic' },
               s.bold && { fontWeight: '700' },
+              s.red && red ? { color: red } : null,
             ]}>
             {s.text}
           </Text>
