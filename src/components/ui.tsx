@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import type { ComponentProps, ReactNode } from 'react';
+import { useEffect, useRef, type ComponentProps, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -184,6 +184,7 @@ export function IconButton({
   color,
   size = 22,
   active,
+  pad,
 }: {
   icon: IconName;
   onPress?: () => void;
@@ -191,6 +192,8 @@ export function IconButton({
   color?: string;
   size?: number;
   active?: boolean;
+  /** Padding around the icon (default 8); smaller in crowded headers. */
+  pad?: number;
 }) {
   const t = useTheme();
   return (
@@ -201,6 +204,7 @@ export function IconButton({
       hitSlop={8}
       style={({ pressed }) => [
         styles.iconButton,
+        pad != null && { padding: pad },
         active && { backgroundColor: t.cardAlt },
         pressed && { opacity: 0.6 },
       ]}>
@@ -305,10 +309,22 @@ export function Sheet({
   const { t: tr } = useT();
   const tablet = useIsTablet();
   const insets = useSafeAreaInsets();
+  // On the website, the click that opened the sheet can land on the backdrop right after and close it
+  // again; ignore backdrop taps for a moment after opening.
+  const openedAt = useRef(0);
+  useEffect(() => {
+    if (visible) openedAt.current = Date.now();
+  }, [visible]);
   return (
     <Modal visible={visible} transparent animationType={tablet ? 'fade' : 'slide'} onRequestClose={onClose}>
       <View style={[styles.backdrop, tablet && { justifyContent: 'center', alignItems: 'center' }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={tr('common.close')} />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={() => {
+            if (Date.now() - openedAt.current > 400) onClose();
+          }}
+          accessibilityLabel={tr('common.close')}
+        />
         <View
           style={[
             styles.sheet,

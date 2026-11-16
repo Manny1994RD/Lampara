@@ -52,6 +52,9 @@ export default function RootLayout() {
                   <Stack.Screen name="plan/[id]" />
                   <Stack.Screen name="badges" />
                   <Stack.Screen name="hub" />
+                  <Stack.Screen name="library" />
+                  <Stack.Screen name="friends" />
+                  <Stack.Screen name="settings" />
                   <Stack.Screen name="welcome" />
                   <Stack.Screen name="join" />
                   <Stack.Screen name="results" />

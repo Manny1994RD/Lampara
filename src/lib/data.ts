@@ -1,3 +1,4 @@
+import { layoutVerse } from './verse-layout';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { HighlightColor } from '@/constants/theme';
@@ -23,7 +24,21 @@ export type Translation = {
   offline: number;
 };
 
-export type Verse = { book: number; ch: number; v: number; text: string; marks: Mark[]; para: boolean };
+export type Verse = {
+  book: number;
+  ch: number;
+  v: number;
+  text: string;
+  marks: Mark[];
+  /** The verse ends a paragraph. */
+  para: boolean;
+  /** Section title shown above this verse (see verse-layout.ts). */
+  title?: string | null;
+  /** A new paragraph starts at this verse (¶ or a section title). */
+  paraStart?: boolean;
+  /** Characters removed from the start of the stored text (word highlights are shifted by this). */
+  cut?: number;
+};
 
 export type Highlight = {
   id: string;
@@ -73,7 +88,7 @@ export async function getChapter(db: SQLiteDatabase, tr: string, book: number, c
   } else {
     await touchChapter(db, tr, book, ch);
   }
-  return rows.map((r) => ({ ...r, marks: r.marks ? JSON.parse(r.marks) : [], para: !!r.para }));
+  return rows.map((r) => layoutVerse({ ...r, marks: r.marks ? JSON.parse(r.marks) : [], para: !!r.para }));
 }
 
 export async function getVerseTexts(db: SQLiteDatabase, tr: string | null, refs: VerseRef[]) {
@@ -89,7 +104,7 @@ export async function getVerseTexts(db: SQLiteDatabase, tr: string | null, refs:
       tr,
       ...params
     );
-    rows.forEach((r) => map.set(refKey(r), r.text));
+    rows.forEach((r) => map.set(refKey(r), r.text.replace(/¶\s*/g, '')));
   }
   // Verses not on this device: ask the hub (Bibles read from the hub).
   const missing = refs.filter((r) => !map.has(refKey(r)));

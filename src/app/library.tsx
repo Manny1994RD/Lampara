@@ -1,4 +1,6 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+
+import { PageTitle } from '@/components/page-title';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -30,7 +32,11 @@ export default function LibraryScreen() {
   const { current, lang } = useTranslations();
   const { t: L, tn } = useT();
   const tr = current?.id ?? null;
-  const [tab, setTab] = useState<Tab>('highlights');
+  // Opened from a Yo tile (/library?tab=notes) or from Guardados in the reader.
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState<Tab>(() =>
+    params.tab === 'bookmarks' || params.tab === 'notes' || params.tab === 'topics' ? params.tab : 'highlights'
+  );
   const [colorFilter, setColorFilter] = useState<HighlightColor | null>(null);
   const [newTopic, setNewTopic] = useState(false);
   const [topicName, setTopicName] = useState('');
@@ -81,7 +87,7 @@ export default function LibraryScreen() {
 
   return (
     <Screen>
-      <Txt variant="title">{L('library.title')}</Txt>
+      <PageTitle title={L('library.title')} />
       <Row style={{ flexWrap: 'wrap', marginTop: 12, marginBottom: 16 }}>
         {tabs.map((x) => (
           <Chip key={x.key} label={`${x.label}${x.count ? ` · ${x.count}` : ''}`} selected={tab === x.key} onPress={() => setTab(x.key)} />

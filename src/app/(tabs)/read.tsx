@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -37,10 +37,11 @@ import {
   Sheet,
   Txt,
   useIsTablet,
+  type IconName,
 } from '@/components/ui';
 import { PAPERS, PAPER_KEYS } from '@/constants/paper';
 import { Fonts, ReaderMaxWidth } from '@/constants/theme';
-import { bookName, getBook, refLabel } from '@/data/books';
+import { bookAbbr, bookName, getBook, refLabel } from '@/data/books';
 import { useLive } from '@/hooks/use-live';
 import { narrator, useReadAloud } from '@/hooks/use-read-aloud';
 import { useTheme } from '@/hooks/use-theme';
@@ -75,6 +76,14 @@ export default function ReadScreen() {
   const { list, current, lang } = useTranslations();
   const { t: L, tn, date } = useT();
   const { book, chapter } = settings;
+  // A shared passage link (/read?ref=43.3.16) opens that chapter at that verse.
+  const { ref: linkRef } = useLocalSearchParams<{ ref?: string }>();
+  useEffect(() => {
+    if (!linkRef) return;
+    const [b, c, v] = String(linkRef).split('.').map((n) => parseInt(n, 10));
+    if (b >= 1 && b <= 66 && c >= 1 && c <= getBook(b).chapters) updateSettings({ book: b, chapter: c, verse: v > 0 ? v : null });
+    router.setParams({ ref: undefined });
+  }, [linkRef]);
   const tr = current?.id ?? null;
 
   // Each load is tagged with the chapter it belongs to, so the previous chapter's text never shows
@@ -91,6 +100,7 @@ export default function ReadScreen() {
   const loaded2 = useLive((d) => loadChapter(d, tr2, book, chapter), [tr2, book, chapter, retry], ['translations']);
   const verses2 = loaded2?.key === `${tr2}:${book}:${chapter}` ? loaded2.verses : undefined;
   const { width: winW } = useWindowDimensions();
+  const compact = winW < 430;
   const fullscreen = settings.readerFullscreen;
   const highlights = useLive((d) => getChapterHighlights(d, book, chapter), [book, chapter], ['highlights']);
   const bookmarks = useLive(async (d) => new Set((await getChapterBookmarks(d, book, chapter)).map((r) => r.v)), [book, chapter], ['bookmarks']);
@@ -238,6 +248,11 @@ export default function ReadScreen() {
     const out: Verse[][] = [];
     let cur: Verse[] = [];
     (verses ?? []).forEach((v) => {
+      // ¶ or a section title starts a new paragraph, like a printed Bible.
+      if (v.paraStart && cur.length) {
+        out.push(cur);
+        cur = [];
+      }
       cur.push(v);
       if (v.para) {
         out.push(cur);
@@ -245,8 +260,9 @@ export default function ReadScreen() {
       }
     });
     if (cur.length) out.push(cur);
-    // Translations without paragraph info: one verse per line reads better.
-    if (out.length === 1 && (verses?.length ?? 0) > 1) return (verses ?? []).map((v) => [v]);
+    // Translations without any paragraph info: one verse per line reads better.
+    const hasInfo = (verses ?? []).some((v) => v.para || v.paraStart);
+    if (!hasInfo && (verses?.length ?? 0) > 1) return (verses ?? []).map((v) => [v]);
     return out;
   }, [verses]);
 
@@ -346,14 +362,19 @@ export default function ReadScreen() {
       {fullscreen && <StatusBar hidden />}
       {/* Header */}
       <View style={[styles.header, { paddingTop: (fullscreen ? 0 : insets.top) + 6, borderColor: t.border, backgroundColor: t.background }]}>
-        <View style={[styles.headerInner, { maxWidth: Math.max(pageMax, ReaderMaxWidth) + 80 }]}>
-          <Pressable onPress={() => setPicker(true)} style={({ pressed }) => [styles.refButton, { backgroundColor: t.cardAlt, opacity: pressed ? 0.7 : 1 }]}>
+        {/* Phones: tighter spacing so the chapter, Bible, Escuchar, Buscar, Guardados and Aa buttons all fit. */}
+        <View style={[styles.headerInner, { maxWidth: Math.max(pageMax, ReaderMaxWidth) + 80 }, compact && { gap: 3 }]}>
+          <Pressable
+            onPress={() => setPicker(true)}
+            accessibilityLabel={`${bookName(book, lang)} ${chapter}`}
+            style={({ pressed }) => [styles.refButton, compact && { paddingHorizontal: 10, flexShrink: 0, minWidth: 0 }, { backgroundColor: t.cardAlt, opacity: pressed ? 0.7 : 1 }]}>
+            {/* Phones: the short book name, so the chapter number always shows. */}
             <Txt variant="label" numberOfLines={1}>
-              {bookName(book, lang)} {chapter}
+              {compact ? bookAbbr(book, lang) : bookName(book, lang)} {chapter}
             </Txt>
             <Ionicons name="chevron-down" size={16} color={t.textSecondary} />
           </Pressable>
-          <Pressable onPress={() => setTrPicker(true)} style={({ pressed }) => [styles.trButton, { borderColor: t.border, opacity: pressed ? 0.7 : 1 }]}>
+          <Pressable onPress={() => setTrPicker(true)} style={({ pressed }) => [styles.trButton, compact && { paddingHorizontal: 6 }, { borderColor: t.border, opacity: pressed ? 0.7 : 1 }]}>
             <Txt variant="small" style={{ fontWeight: '700' }} numberOfLines={1}>
               {current?.abbr ?? '…'}
               {second ? (winW >= 520 ? ` + ${second.abbr}` : ' ⇄') : ''}
@@ -364,10 +385,13 @@ export default function ReadScreen() {
             icon={listen.open ? 'headset' : 'headset-outline'}
             active={listen.open}
             label={L('read.listen')}
+            pad={compact ? 5 : undefined}
             onPress={() => (listen.open ? narrator.close() : narrator.start())}
           />
-          <IconButton icon="search" label={L('read.search')} onPress={() => router.push('/search')} />
-          <IconButton icon={bookMode ? 'book-outline' : 'text'} label={L('read.display')} onPress={() => setFontSheet(true)} />
+          <HeaderPill icon="search" label={L('read.searchShort')} compact={compact} onPress={() => router.push('/search')} />
+          {/* Your highlights, bookmarks, notes and topics (Mis versículos). On small phones only the icon fits. */}
+          <HeaderPill icon="bookmarks-outline" label={L('read.saved')} showLabel={!compact} compact={compact} onPress={() => router.push('/library')} />
+          <IconButton icon={bookMode ? 'book-outline' : 'text'} label={L('read.display')} pad={compact ? 5 : undefined} onPress={() => setFontSheet(true)} />
           {/* Phones have little room in the header: there it's in the Display sheet. */}
           {(winW >= 520 || fullscreen) && (
             <IconButton
@@ -598,7 +622,10 @@ export default function ReadScreen() {
                 icon="share-outline"
                 title={L('common.share')}
                 onPress={() => {
-                  const message = `${selectedText()}\n— ${selLabel} (${current?.abbr})`;
+                  const hub = getHub();
+                  // With a church server, add a link that opens the passage (app or website).
+                  const link = hub ? `\n${hub.url}/read?ref=${book}.${chapter}.${selected[0]}` : '';
+                  const message = `${selectedText()}\n— ${selLabel} (${current?.abbr})${link}`;
                   if (Platform.OS === 'web' && !navigator.share) navigator.clipboard?.writeText(message);
                   else Share.share({ message });
                 }}
@@ -775,6 +802,43 @@ export default function ReadScreen() {
   );
 }
 
+/** Small labeled header button (Buscar, Guardados). */
+function HeaderPill({
+  icon,
+  label,
+  onPress,
+  showLabel = true,
+  compact = false,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  showLabel?: boolean;
+  compact?: boolean;
+}) {
+  const t = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={6}
+      style={({ pressed }) => [
+        styles.pill,
+        compact && { paddingHorizontal: 8, gap: 3 },
+        { borderColor: t.border, opacity: pressed ? 0.7 : 1 },
+        !showLabel && { paddingHorizontal: 7 },
+      ]}>
+      <Ionicons name={icon} size={17} color={t.text} />
+      {showLabel && (
+        <Txt variant="small" style={{ fontWeight: '700' }} numberOfLines={1}>
+          {label}
+        </Txt>
+      )}
+    </Pressable>
+  );
+}
+
 /** Tiled paper texture behind the content (or a flat color when there's no texture). */
 function PaperBackground({
   texture,
@@ -852,6 +916,7 @@ const styles = StyleSheet.create({
   page: { width: '100%', alignSelf: 'center', paddingTop: 18 },
   chapterTitle: { fontSize: 30, fontWeight: '700', marginBottom: 14, textAlign: 'center' },
   paragraph: { marginBottom: 10 },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
   pairRow: { flexDirection: 'row', gap: 28, marginBottom: 12 },
   verseNum: { fontWeight: '700', fontFamily: Platform.select({ web: 'var(--font-display)', default: undefined }) },
   actionBar: {

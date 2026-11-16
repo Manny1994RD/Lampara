@@ -21,6 +21,7 @@ import {
   type VerseRef,
 } from '@/lib/data';
 import { buildSegments, tokenize } from '@/lib/segments';
+import { shiftHighlights } from '@/lib/verse-layout';
 
 /* --------------------------- word highlighter --------------------------- */
 
@@ -47,7 +48,7 @@ export function WordHighlightSheet({
 
   const words = tokenize(verse.text);
   const mine = highlights.filter((h) => h.v === verse.v && h.tr === tr && h.start != null);
-  const segs = buildSegments(verse.text, [], mine);
+  const segs = buildSegments(verse.text, [], shiftHighlights(mine, verse.cut));
   const colorAt = (s: number) => segs.find((g) => g.start <= s && s < g.start + g.text.length)?.color ?? null;
 
   const tap = (i: number) => {
@@ -58,7 +59,9 @@ export function WordHighlightSheet({
 
   const save = async () => {
     if (!range) return;
-    await addWordHighlight(db, verse, tr, words[range[0]].s, words[range[1]].e, color);
+    // Saved as positions in the stored text (the shown text may start later, see verse-layout.ts).
+    const cut = verse.cut ?? 0;
+    await addWordHighlight(db, verse, tr, words[range[0]].s + cut, words[range[1]].e + cut, color);
     setRange(null);
   };
   return (

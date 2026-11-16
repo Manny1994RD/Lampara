@@ -1,5 +1,7 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
+
+import { PageTitle } from '@/components/page-title';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 
@@ -50,7 +52,7 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
-      <Txt variant="title">{tr('tab.settings')}</Txt>
+      <PageTitle title={tr('tab.settings')} />
 
       <SectionTitle>{tr('settings.language')}</SectionTitle>
       <Row style={{ flexWrap: 'wrap' }}>

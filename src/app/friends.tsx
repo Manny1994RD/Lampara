@@ -1,4 +1,6 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+
+import { PageTitle } from '@/components/page-title';
 import { useState } from 'react';
 import { Platform, Share, StyleSheet, TextInput, View } from 'react-native';
 
@@ -35,7 +37,7 @@ export default function FriendsScreen() {
   if (!hub) {
     return (
       <Screen>
-        <Txt variant="title">{tr('tab.friends')}</Txt>
+        <PageTitle title={tr('me.friends')} />
         <Empty
           icon="people"
           title={tr('friends.emptyTitle')}
@@ -62,7 +64,9 @@ function Connected() {
   }, []);
   const friends = useRemote(() => listFriends(), []);
   const invites = useRemote(() => listInvites(), []);
-  const [code, setCode] = useState('');
+  // A shared friend link (/friends?add=CODE) fills in the code.
+  const { add: linkCode } = useLocalSearchParams<{ add?: string }>();
+  const [code, setCode] = useState(linkCode ? String(linkCode).toUpperCase() : '');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const active = challenges.data?.filter((x) => x.c.end_day >= today) ?? [];
@@ -86,10 +90,7 @@ function Connected() {
 
   return (
     <Screen>
-      <Row style={{ justifyContent: 'space-between' }}>
-        <Txt variant="title">{tr('tab.friends')}</Txt>
-        <Button small kind="secondary" icon="add" title={tr('friends.newChallenge')} onPress={() => router.push('/challenge/new')} />
-      </Row>
+      <PageTitle title={tr('me.friends')} />
       <Txt muted variant="small">
         {tr('friends.signedInAs', { name: hub.user.name })}{' '}
         <Txt variant="small" color={t.accent} style={{ fontWeight: '700' }}>
@@ -104,7 +105,9 @@ function Connected() {
         </Card>
       )}
 
-      <SectionTitle>{tr('friends.challenges')}</SectionTitle>
+      <SectionTitle right={<Button small kind="secondary" icon="add" title={tr('friends.newChallenge')} onPress={() => router.push('/challenge/new')} />}>
+        {tr('friends.challenges')}
+      </SectionTitle>
       {active.length === 0 ? (
         <Card style={{ gap: 8 }}>
           <Txt>{tr('friends.noChallenges')}</Txt>

@@ -14,7 +14,7 @@ import { useSettings } from '@/lib/settings';
 
 const TABS: {
   name: string;
-  href: '/' | '/read' | '/progress' | '/library' | '/friends' | '/settings';
+  href: '/' | '/read' | '/progress' | '/me';
   label: TKey;
   icon: IconName;
   iconActive: IconName;
@@ -22,9 +22,8 @@ const TABS: {
   { name: 'index', href: '/', label: 'tab.today', icon: 'sunny-outline', iconActive: 'sunny' },
   { name: 'read', href: '/read', label: 'tab.read', icon: 'book-outline', iconActive: 'book' },
   { name: 'progress', href: '/progress', label: 'tab.progress', icon: 'grid-outline', iconActive: 'grid' },
-  { name: 'library', href: '/library', label: 'tab.verses', icon: 'bookmarks-outline', iconActive: 'bookmarks' },
-  { name: 'friends', href: '/friends', label: 'tab.friends', icon: 'people-outline', iconActive: 'people' },
-  { name: 'settings', href: '/settings', label: 'tab.settings', icon: 'settings-outline', iconActive: 'settings' },
+  // Mis versículos, Amigos y retos and Ajustes are inside Yo.
+  { name: 'me', href: '/me', label: 'tab.me', icon: 'person-circle-outline', iconActive: 'person-circle' },
 ];
 
 export default function TabsLayout() {

@@ -4,6 +4,7 @@ import { highlightBg } from '@/components/ui';
 import type { HighlightColor } from '@/constants/theme';
 import type { Highlight, Verse } from '@/lib/data';
 import { buildSegments } from '@/lib/segments';
+import { shiftHighlights } from '@/lib/verse-layout';
 
 export type VerseColors = { text: string; accent: string; dark: boolean };
 
@@ -39,7 +40,7 @@ export function VerseText({
   onPress: () => void;
   leadingSpace?: boolean;
 }) {
-  const segs = buildSegments(verse.text, verse.marks, wordHighlights);
+  const segs = buildSegments(verse.text, verse.marks, shiftHighlights(wordHighlights, verse.cut));
   return (
     <Text
       onPress={onPress}
@@ -48,8 +49,15 @@ export function VerseText({
         selected && { textDecorationLine: 'underline', textDecorationStyle: 'dotted', textDecorationColor: colors.accent },
         speaking && { backgroundColor: colors.dark ? 'rgba(255,138,61,0.22)' : 'rgba(232,89,12,0.13)' },
       ]}>
+      {/* Section title on its own line (the paragraph starts here). */}
+      {verse.title ? (
+        <Text style={{ fontWeight: '700', fontSize: fontSize * 0.92 }}>
+          {verse.title}
+          {'\n'}
+        </Text>
+      ) : null}
       <Text style={[styles.verseNum, { color: colors.accent, fontSize: fontSize * 0.62 }]}>
-        {leadingSpace ? ' ' : ''}
+        {leadingSpace && !verse.title ? ' ' : ''}
         {verse.v}
         {' '}
       </Text>
