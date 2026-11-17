@@ -24,6 +24,7 @@ import { ChapterPicker } from '@/components/reader/chapter-picker';
 import { BookView } from '@/components/reader/book-view';
 import { ListenBar } from '@/components/reader/listen-bar';
 import { VerseText } from '@/components/reader/verse-text';
+import { NotesSheet } from '@/components/reader/notes-sheet';
 import { NoteSheet, TopicSheet, WordHighlightSheet } from '@/components/reader/verse-sheets';
 import {
   Button,
@@ -130,6 +131,8 @@ export default function ReadScreen() {
   const [fontSheet, setFontSheet] = useState(false);
   const [wordVerse, setWordVerse] = useState<Verse | null>(null);
   const [noteRef, setNoteRef] = useState<VerseRef | null>(null);
+  // Estudio: references, notes and commentaries from the church library for one verse.
+  const [studyRef, setStudyRef] = useState<VerseRef | null>(null);
   const [topicRefs, setTopicRefs] = useState<VerseRef[] | null>(null);
   const scrollRef = useRef<ScrollViewInstance>(null);
 
@@ -322,6 +325,7 @@ export default function ReadScreen() {
       hasNote={notes?.has(v.v)}
       topicColor={topicDots?.get(v.v) ?? null}
       onPress={() => toggle(v.v)}
+      onRefPress={getHub() ? () => setStudyRef({ book, ch: chapter, v: v.v }) : undefined}
       leadingSpace={leadingSpace}
     />
   );
@@ -615,6 +619,9 @@ export default function ReadScreen() {
               {selected.length === 1 && (
                 <Button small kind="secondary" icon="create-outline" title={L('read.note')} onPress={() => setNoteRef(selRefs[0])} />
               )}
+              {selected.length === 1 && !!getHub() && (
+                <Button small kind="secondary" icon="library-outline" title={L('notes.button')} onPress={() => setStudyRef(selRefs[0])} />
+              )}
               <Button small kind="secondary" icon="pricetags-outline" title={L('read.topic')} onPress={() => setTopicRefs(selRefs)} />
               <Button
                 small
@@ -789,6 +796,19 @@ export default function ReadScreen() {
           }}
         />
       )}
+      <NotesSheet
+        verseRef={studyRef}
+        lang={lang}
+        onClose={() => {
+          setStudyRef(null);
+          setSelected([]);
+        }}
+        onGo={(b, c, v) => {
+          setStudyRef(null);
+          setSelected([]);
+          updateSettings({ book: b, chapter: c, verse: v });
+        }}
+      />
       <NoteSheet
         key={noteRef ? `note-${noteRef.book}:${noteRef.ch}:${noteRef.v}` : 'note-none'}
         verseRef={noteRef}

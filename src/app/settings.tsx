@@ -13,6 +13,7 @@ import { Alert, Platform, Pressable, Share, StyleSheet, Switch, TextInput, View 
 
 import { AppUpdates } from '@/components/app-updates';
 import { ImportButton } from '@/components/import-button';
+import { CommentaryLibrary } from '@/components/commentary-library';
 import { SyncBadge } from '@/components/sync-badge';
 import { Button, Card, Chip, IconButton, Ionicons, Row, Screen, SectionTitle, Sheet, Txt } from '@/components/ui';
 import { useTheme } from '@/hooks/use-theme';
@@ -111,6 +112,9 @@ export default function SettingsScreen() {
           </Txt>
         )}
       </Card>
+
+      <SectionTitle>{tr('notes.libraryTitle')}</SectionTitle>
+      <CommentaryLibrary />
 
       <SectionTitle>{tr('settings.hub')}</SectionTitle>
       <HubCard />

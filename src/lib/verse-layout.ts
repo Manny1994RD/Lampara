@@ -46,8 +46,8 @@ export function layoutVerse(v: Verse): Verse {
 
   if (!cut) return text === v.text ? v : { ...v, text };
   const marks = v.marks
-    .map((m) => ({ ...m, s: Math.max(0, m.s - cut), e: m.e - cut }))
-    .filter((m) => m.e > m.s);
+    .map((m) => ({ ...m, s: Math.max(0, m.s - cut), e: Math.max(0, m.e - cut) }))
+    .filter((m) => m.e > m.s || m.t === 'f');
   return { ...v, text, marks, title, paraStart, cut };
 }
 

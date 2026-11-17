@@ -7,9 +7,9 @@
  *   " In {\cf6\super G1722} the beginning ..."     (Strong's numbers)
  */
 
-/** i = italic, b = bold, r = words of Jesus (red letters). */
-export type MarkType = 'i' | 'b' | 'r';
-export type Mark = { s: number; e: number; t: MarkType };
+/** i = italic, b = bold, r = words of Jesus (red letters), f = reference letter like (A) or [7] (s = e, label in x). */
+export type MarkType = 'i' | 'b' | 'r' | 'f';
+export type Mark = { s: number; e: number; t: MarkType; x?: string };
 export type ParsedVerse = {
   text: string;
   marks: Mark[];
@@ -17,7 +17,7 @@ export type ParsedVerse = {
   para: boolean;
 };
 
-type Style = { i: boolean; b: boolean; r: boolean; hidden: boolean; skip: boolean };
+type Style = { i: boolean; b: boolean; r: boolean; hidden: boolean; skip: boolean; sup?: boolean };
 
 /** e-Sword's color number for the words of Jesus (RVR1960, LBLA, ESV, …). */
 const RED = 6;
@@ -37,7 +37,11 @@ const SYMBOLS: Record<string, string> = {
 /** Destination groups whose content is never shown. */
 const SKIP_GROUPS = new Set(['fonttbl', 'colortbl', 'stylesheet', 'info', '*']);
 
-export function parseEswordVerse(raw: string | null | undefined): ParsedVerse {
+/**
+ * Converts e-Sword RTF to plain text + style marks.
+ * showSuper: keep superscript text (commentaries use it for reference letters like "A"); Bibles hide it.
+ */
+export function parseEswordVerse(raw: string | null | undefined, opts: { showSuper?: boolean } = {}): ParsedVerse {
   const src = raw ?? '';
   let out = '';
   const marks: Mark[] = [];
@@ -72,7 +76,18 @@ export function parseEswordVerse(raw: string | null | undefined): ParsedVerse {
     }
   };
 
+  // Superscript text (hidden in Bibles): kept aside so reference letters like "(A)" can become markers.
+  let supBuf = '';
+  const flushSup = () => {
+    const m = /^[([]\s*([A-Za-z0-9]{1,3})\s*[)\]]$/.exec(supBuf.trim());
+    if (m) marks.push({ s: out.length, e: out.length, t: 'f', x: m[1] });
+    supBuf = '';
+  };
   const emit = (ch: string) => {
+    if (st.hidden && st.sup && !st.skip) {
+      supBuf += ch;
+      return;
+    }
     if (st.hidden || st.skip) return;
     if (skipFallback > 0) {
       skipFallback--;
@@ -92,7 +107,9 @@ export function parseEswordVerse(raw: string | null | undefined): ParsedVerse {
       continue;
     }
     if (c === '}') {
+      const wasSup = !!st.sup && st.hidden;
       st = stack.pop() ?? { i: false, b: false, r: false, hidden: false, skip: false };
+      if (wasSup && !(st.sup && st.hidden)) flushSup();
       syncMarks();
       groupStart = false;
       k++;
@@ -145,10 +162,17 @@ export function parseEswordVerse(raw: string | null | undefined): ParsedVerse {
           break;
         case 'super':
         case 'sub':
-          st.hidden = true; // Strong's numbers / footnote markers
+          st.hidden = !opts.showSuper; // Strong's numbers / footnote markers
+          st.sup = num !== 0;
+          if (num === 0) {
+            st.hidden = false;
+            flushSup();
+          }
           break;
         case 'nosupersub':
+          if (st.sup) flushSup();
           st.hidden = false;
+          st.sup = false;
           break;
         case 'cf':
           // Text color: color 6 is how e-Sword Bibles mark the words of Jesus.
@@ -158,6 +182,8 @@ export function parseEswordVerse(raw: string | null | undefined): ParsedVerse {
           st.i = false;
           st.b = false;
           st.r = false;
+          if (st.sup) flushSup();
+          st.sup = false;
           st.hidden = false;
           break;
         case 'u':
@@ -183,6 +209,7 @@ export function parseEswordVerse(raw: string | null | undefined): ParsedVerse {
     k++;
   }
   // close open runs
+  if (supBuf) flushSup();
   st = { i: false, b: false, r: false, hidden: false, skip: false };
   syncMarks();
 
@@ -213,8 +240,8 @@ function normalize(text: string, marks: Mark[], para: boolean): ParsedVerse {
   // trim trailing whitespace
   const trimmed = res.replace(/\s+$/, '');
   const newMarks = marks
-    .map((m) => ({ s: map[m.s], e: Math.min(map[m.e], trimmed.length), t: m.t }))
-    .filter((m) => m.e > m.s);
+    .map((m) => ({ ...m, s: Math.min(map[m.s], trimmed.length), e: Math.min(map[m.e], trimmed.length) }))
+    .filter((m) => m.e > m.s || m.t === 'f');
   return { text: trimmed, marks: newMarks, para };
 }
 

@@ -181,6 +181,8 @@ node server/test/bible-test.mjs http://127.0.0.1:8090 owner@test.local member@te
 | `pb_hooks/bibles.pb.js` | `/api/lampara/bibles` routes: list, upload, read chapters, search |
 | `pb_hooks/voice.pb.js` | `/api/lampara/voice` routes: voice status and verse audio (signed-in members only) |
 | `voice/` | The `lampara-voice` container: Supertonic 3 text-to-speech with an MP3 cache |
+| `pb_migrations/1763500000_commentaries.js` | Tables for commentaries, notes and cross-references (e-Sword .cmtx) |
+| `pb_hooks/commentaries.pb.js` | `/api/lampara/commentaries` (owner adds/removes) and `/api/lampara/notes` (everything about one verse) |
 
 ### Privacy rules (enforced by the server)
 

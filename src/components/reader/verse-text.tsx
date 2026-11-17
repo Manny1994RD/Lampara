@@ -25,6 +25,7 @@ export function VerseText({
   hasNote,
   topicColor,
   onPress,
+  onRefPress,
   leadingSpace = true,
 }: {
   verse: Verse;
@@ -39,11 +40,20 @@ export function VerseText({
   hasNote?: boolean;
   topicColor?: HighlightColor | null;
   onPress: () => void;
+  /** Tapping a reference letter like (A): open Estudio for this verse. Without it the letters aren't shown. */
+  onRefPress?: () => void;
   leadingSpace?: boolean;
 }) {
   const segs = buildSegments(verse.text, verse.marks, shiftHighlights(wordHighlights, verse.cut));
   // Words of Jesus: a deep red that stays readable on paper and in dark mode.
   const red = useSettings().redLetters ? (colors.dark ? '#FF8A80' : '#B3261E') : null;
+  // Reference letters (A), [7] from e-Sword Bibles, drawn small at their place in the verse.
+  const letters = onRefPress ? verse.marks.filter((m) => m.t === 'f' && m.x) : [];
+  const letter = (key: string, x: string) => (
+    <Text key={key} onPress={onRefPress} suppressHighlighting accessibilityRole="link" style={[styles.letter, { color: colors.accent, fontSize: fontSize * 0.55 }]}>
+      {x}
+    </Text>
+  );
   return (
     <Text
       onPress={onPress}
@@ -66,7 +76,9 @@ export function VerseText({
       </Text>
       {segs.map((s, si) => {
         const bg = s.color ?? verseColor;
-        return (
+        const here = letters.filter((m) => m.s === s.start);
+        return [
+          ...here.map((m, li) => letter(`f${si}-${li}`, m.x!)),
           <Text
             key={si}
             style={[
@@ -76,9 +88,10 @@ export function VerseText({
               s.red && red ? { color: red } : null,
             ]}>
             {s.text}
-          </Text>
-        );
+          </Text>,
+        ];
       })}
+      {letters.filter((m) => m.s >= verse.text.length).map((m, li) => letter(`fe${li}`, m.x!))}
       {bookmarked && <Text style={{ color: colors.accent }}> ◆</Text>}
       {hasNote && <Text style={{ color: colors.accent }}> ✎</Text>}
       {topicColor && <Text style={{ color: highlightBg(topicColor, !colors.dark) }}> ●</Text>}
@@ -88,4 +101,5 @@ export function VerseText({
 
 const styles = StyleSheet.create({
   verseNum: { fontWeight: '700', fontFamily: Platform.select({ web: 'var(--font-display)', default: undefined }) },
+  letter: { fontWeight: '800' },
 });
