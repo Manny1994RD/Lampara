@@ -15,6 +15,16 @@
       },
       "channel": "preview"
     },
+    "ios-simulator": {
+      "extends": "preview",
+      "env": {
+        "LAMPARA_IOS": "1"
+      },
+      "ios": {
+        "simulator": true,
+        "scheme": "Lampara"
+      }
+    },
     "production": {
       "android": {
         "buildType": "apk"

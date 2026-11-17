@@ -1,0 +1,73 @@
+# Builds an UNSIGNED iPhone app (Lampara.ipa) on a GitHub Mac, for sideloading.
+# Sign and install it from Windows with Sideloadly (or AltStore / xtool) and your own Apple ID.
+# Run it by hand: GitHub → Actions → "iOS unsigned IPA" → Run workflow.
+name: iOS unsigned IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      # iPhone builds use the plain project name "Lampara" (see app.config.js).
+      LAMPARA_IOS: '1'
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install packages
+        run: npm ci
+
+      - name: Generate the iOS project
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: Install pods
+        run: cd ios && pod install
+
+      - name: Build for iPhone (no signing)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace ios/Lampara.xcworkspace \
+            -scheme Lampara \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Lampara.xcarchive" \
+            archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | tee "$RUNNER_TEMP/xcodebuild.log" | grep -E "error:|warning: unable|ARCHIVE|BUILD|▸|Compiling|Linking" | tail -n 400 || true
+          test -d "$RUNNER_TEMP/Lampara.xcarchive/Products/Applications/Lampara.app"
+
+      - name: Package Lampara.ipa
+        run: |
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP/Lampara.xcarchive/Products/Applications/Lampara.app" "$RUNNER_TEMP/ipa/Payload/"
+          cd "$RUNNER_TEMP/ipa" && zip -qry Lampara.ipa Payload
+          ls -lh Lampara.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lampara-unsigned-ipa
+          path: ${{ runner.temp }}/ipa/Lampara.ipa
+          retention-days: 14
+
+      - name: Keep the Xcode log if the build failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          retention-days: 7
